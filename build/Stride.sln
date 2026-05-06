@@ -349,6 +349,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Stride.Build.Sdk.Tests", "S
 		..\sources\sdk\Stride.Build.Sdk.Tests\Sdk\Sdk.targets = ..\sources\sdk\Stride.Build.Sdk.Tests\Sdk\Sdk.targets
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.ScreenshotComparator", "..\sources\tests\Stride.ScreenshotComparator\Stride.ScreenshotComparator.csproj", "{74D99A2C-7F6E-473E-8839-8229F475AA5A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1502,6 +1504,18 @@ Global
 		{35EC42D8-0A09-41AE-A918-B8C2796061B3}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{35EC42D8-0A09-41AE-A918-B8C2796061B3}.Release|Win32.ActiveCfg = Release|Any CPU
 		{35EC42D8-0A09-41AE-A918-B8C2796061B3}.Release|Win32.Build.0 = Release|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Debug|Win32.Build.0 = Debug|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Release|Win32.ActiveCfg = Release|Any CPU
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A}.Release|Win32.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1629,6 +1643,7 @@ Global
 		{D26186F8-7158-4A01-9524-EF4F53E0802C} = {0B81090E-4066-4723-A658-8AEDBEADE619}
 		{8D873BE7-8EF2-4478-B86A-249021D046EB} = {0B81090E-4066-4723-A658-8AEDBEADE619}
 		{E6B11A34-A1DB-41C2-B509-94DACA9D9BDE} = {0B81090E-4066-4723-A658-8AEDBEADE619}
+		{74D99A2C-7F6E-473E-8839-8229F475AA5A} = {1AE1AC60-5D2F-4CA7-AE20-888F44551185}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {FF877973-604D-4EA7-B5F5-A129961F9EF2}
