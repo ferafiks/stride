@@ -25,7 +25,7 @@ public static class ClaudeVisionFallback
 
     public readonly record struct Verdict(bool Pass, string Reason);
 
-    public static Verdict Compare(string baselinePath, string capturePath, string? extraHint)
+    public static Verdict Compare(string baselinePath, string capturePath, ComparisonPrompt prompt)
     {
         var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrEmpty(apiKey))
@@ -34,30 +34,7 @@ public static class ClaudeVisionFallback
         var baselineB64 = Convert.ToBase64String(File.ReadAllBytes(baselinePath));
         var captureB64 = Convert.ToBase64String(File.ReadAllBytes(capturePath));
 
-        var prompt =
-            "Compare these two Stride engine screenshots — BASELINE (expected) vs CAPTURE " +
-            "(this run). Both were produced by the same engine code; visible differences are " +
-            "almost always caused by test-harness timing nondeterminism (variable frame pacing " +
-            "across graphics APIs), NOT by a rendering regression. A rendering regression looks " +
-            "broken, not just 'different'. Be tolerant.\n\n" +
-            "YES (not a regression):\n" +
-            "- HUD numeric values differ (ammo, score, timer, FPS, health). This is gameplay state.\n" +
-            "- Character / weapon / camera pose, aim angle, or hand-bob phase differs. Animation phase.\n" +
-            "- Particle / smoke / fire / cloth / water / lighting / post-process noise differs.\n" +
-            "- Same overall scene with one element in a slightly different position or animation state.\n" +
-            "\n" +
-            "NO (real regression):\n" +
-            "- Whole-frame color / gamma / brightness shift (capture noticeably darker, desaturated, " +
-            "washed-out, or with wrong sRGB encoding).\n" +
-            "- Missing or corrupt geometry (broken meshes, distorted models, holes).\n" +
-            "- Missing or wrong textures (pink/purple checkerboard, all-black surfaces, wrong materials).\n" +
-            "- Missing post-process pass (no bloom / shadow / SSAO / tonemapping where baseline has them).\n" +
-            "- Different UI page, missing UI elements, wrong UI text labels (label text, not numeric values).\n" +
-            "- Wrong scene entirely (different level, different camera angle by 90°+, missing major objects).\n" +
-            "\n" +
-            "Format: \"YES: <one-line reason>\" or \"NO: <one-line reason>\".";
-        if (!string.IsNullOrEmpty(extraHint))
-            prompt += " Additional context for this specific frame: " + extraHint;
+        var promptText = prompt.Build();
 
         var body = JsonSerializer.Serialize(new
         {
@@ -75,7 +52,7 @@ public static class ClaudeVisionFallback
                         new { type = "image", source = new { type = "base64", media_type = "image/png", data = baselineB64 } },
                         new { type = "text", text = "CAPTURE:" },
                         new { type = "image", source = new { type = "base64", media_type = "image/png", data = captureB64 } },
-                        new { type = "text", text = prompt },
+                        new { type = "text", text = promptText },
                     },
                 },
             },

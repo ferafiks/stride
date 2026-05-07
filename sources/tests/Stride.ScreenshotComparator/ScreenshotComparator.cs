@@ -39,8 +39,9 @@ public static class ScreenshotComparator
     /// the executing assembly's <c>models/</c> sibling — works when the file is CopyToOutputDirectory'd
     /// into the consumer's bin).
     /// </summary>
-    public static List<ComparisonResult> Compare(string newDir, string baselineDir, string? sampleFilter = null, float defaultThreshold = DefaultThreshold, string? modelPath = null)
+    public static List<ComparisonResult> Compare(string newDir, string baselineDir, string? sampleFilter = null, float defaultThreshold = DefaultThreshold, string? modelPath = null, ComparisonPrompt? defaultPrompt = null)
     {
+        defaultPrompt ??= GameplayComparisonPrompt.Default;
         modelPath ??= Path.Combine(AppContext.BaseDirectory, "models", "lpips_alex.onnx");
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"LPIPS model not found at {modelPath}", modelPath);
@@ -96,7 +97,8 @@ public static class ScreenshotComparator
 
                 if (meta.ClaudeFallbackEnabled)
                 {
-                    var verdict = ClaudeVisionFallback.Compare(baselinePng, newPng, meta.ClaudeFallbackHint);
+                    var prompt = defaultPrompt with { ExtraHint = meta.ClaudeFallbackHint };
+                    var verdict = ClaudeVisionFallback.Compare(baselinePng, newPng, prompt);
                     var detail = $"lpips drift; claude: {verdict.Reason}";
                     results.Add(new ComparisonResult(sample, frame, distance, frameThreshold,
                         verdict.Pass ? "ok-via-claude" : "drift", detail));
