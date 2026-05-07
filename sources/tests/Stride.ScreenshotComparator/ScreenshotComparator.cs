@@ -68,11 +68,11 @@ public static class ScreenshotComparator
             foreach (var newPng in Directory.EnumerateFiles(screenshotsDir, "*.png"))
             {
                 var frame = Path.GetFileNameWithoutExtension(newPng);
-                var baselinePng = Path.Combine(baselineDir, sample, frame + ".png");
+                var baselines = FindBaselineVariants(Path.Combine(baselineDir, sample), frame);
                 perFrameMetadata.TryGetValue(frame, out var meta);
                 var frameThreshold = meta.Threshold ?? defaultThreshold;
 
-                if (!File.Exists(baselinePng))
+                if (baselines.Count == 0)
                 {
                     results.Add(new ComparisonResult(sample, frame, null, frameThreshold, "new", "no baseline yet"));
                     continue;
@@ -81,7 +81,9 @@ public static class ScreenshotComparator
                 float distance;
                 try
                 {
-                    distance = ComputeLpips(session, baselinePng, newPng);
+                    // Multi-baseline: take the closest match — captures only need to align with ONE
+                    // of the curated acceptable variants for LPIPS to pass.
+                    distance = baselines.Min(b => ComputeLpips(session, b, newPng));
                 }
                 catch (Exception ex)
                 {
@@ -98,8 +100,8 @@ public static class ScreenshotComparator
                 if (meta.ClaudeFallbackEnabled)
                 {
                     var prompt = defaultPrompt with { ExtraHint = meta.ClaudeFallbackHint };
-                    var verdict = ClaudeVisionFallback.Compare(baselinePng, newPng, prompt);
-                    var detail = $"lpips drift; claude: {verdict.Reason}";
+                    var verdict = ClaudeVisionFallback.Compare(baselines, newPng, prompt);
+                    var detail = $"lpips drift (vs {baselines.Count} baseline(s)); claude: {verdict.Reason}";
                     results.Add(new ComparisonResult(sample, frame, distance, frameThreshold,
                         verdict.Pass ? "ok-via-claude" : "drift", detail));
                     continue;
@@ -110,6 +112,8 @@ public static class ScreenshotComparator
         }
 
         // Walk baselines that have no matching new capture (missing — capture probably failed).
+        // Variant files like "main.dark-scene.png" share the same frame name "main", so collapse
+        // them to a set of unique frame names before checking the capture dir.
         if (Directory.Exists(baselineDir))
         {
             foreach (var sampleDir in Directory.EnumerateDirectories(baselineDir))
@@ -117,9 +121,11 @@ public static class ScreenshotComparator
                 var sample = Path.GetFileName(sampleDir);
                 if (sampleFilter is not null && !string.Equals(sample, sampleFilter, StringComparison.OrdinalIgnoreCase))
                     continue;
-                foreach (var baselinePng in Directory.EnumerateFiles(sampleDir, "*.png"))
+                var frames = Directory.EnumerateFiles(sampleDir, "*.png")
+                    .Select(p => Path.GetFileNameWithoutExtension(p).Split('.')[0])
+                    .Distinct(StringComparer.Ordinal);
+                foreach (var frame in frames)
                 {
-                    var frame = Path.GetFileNameWithoutExtension(baselinePng);
                     var newPng = Path.Combine(newDir, sample, "screenshots", frame + ".png");
                     if (File.Exists(newPng))
                         continue;
@@ -134,6 +140,23 @@ public static class ScreenshotComparator
             return c != 0 ? c : string.Compare(a.Frame, b.Frame, StringComparison.Ordinal);
         });
         return results;
+    }
+
+    /// <summary>
+    /// Returns the set of acceptable baselines for <paramref name="frame"/> in <paramref name="sampleDir"/>:
+    /// the canonical <c>frame.png</c> plus any variants named <c>frame.&lt;tag&gt;.png</c>. Empty list if
+    /// the sample directory or no matching files exist.
+    /// </summary>
+    private static List<string> FindBaselineVariants(string sampleDir, string frame)
+    {
+        var list = new List<string>();
+        if (!Directory.Exists(sampleDir)) return list;
+        var canonical = Path.Combine(sampleDir, frame + ".png");
+        if (File.Exists(canonical)) list.Add(canonical);
+        // <frame>.<anything>.png — Win32 glob treats the last "." segment as the extension.
+        foreach (var f in Directory.EnumerateFiles(sampleDir, frame + ".*.png"))
+            list.Add(f);
+        return list;
     }
 
     private static float ComputeLpips(InferenceSession session, string pathA, string pathB)

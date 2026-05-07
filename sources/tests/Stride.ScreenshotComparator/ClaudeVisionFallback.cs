@@ -2,7 +2,9 @@
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -10,10 +12,11 @@ using System.Text.Json;
 namespace Stride.Tests.ScreenshotComparator;
 
 /// <summary>
-/// Calls Claude Haiku 4.5 vision with the baseline + capture and asks "is this the same scene?".
+/// Calls Claude Haiku 4.5 vision with the baseline(s) + capture and asks "is this the same scene?".
 /// Used as a second-opinion fallback when LPIPS is over threshold but the test opted into
-/// <c>claudeFallback</c>. ANTHROPIC_API_KEY env var is required; if missing, the fallback fails
-/// closed (returns Pass=false) so the regression sticks.
+/// <c>claudeFallback</c>. When more than one baseline is provided they're framed as the
+/// acceptable variance range for the frame. ANTHROPIC_API_KEY env var is required; if missing,
+/// the fallback fails closed (returns Pass=false) so the regression sticks.
 /// </summary>
 public static class ClaudeVisionFallback
 {
@@ -25,16 +28,32 @@ public static class ClaudeVisionFallback
 
     public readonly record struct Verdict(bool Pass, string Reason);
 
+    /// <summary>Single-baseline overload — back-compat shim around the multi-baseline form.</summary>
     public static Verdict Compare(string baselinePath, string capturePath, ComparisonPrompt prompt)
+        => Compare(new[] { baselinePath }, capturePath, prompt);
+
+    public static Verdict Compare(IReadOnlyList<string> baselinePaths, string capturePath, ComparisonPrompt prompt)
     {
         var apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
         if (string.IsNullOrEmpty(apiKey))
             return new Verdict(false, "ANTHROPIC_API_KEY not set");
+        if (baselinePaths.Count == 0)
+            return new Verdict(false, "no baselines provided");
 
-        var baselineB64 = Convert.ToBase64String(File.ReadAllBytes(baselinePath));
         var captureB64 = Convert.ToBase64String(File.ReadAllBytes(capturePath));
+        var promptText = prompt.Build(baselinePaths.Count);
 
-        var promptText = prompt.Build();
+        var content = new List<object>();
+        for (var i = 0; i < baselinePaths.Count; i++)
+        {
+            var label = baselinePaths.Count == 1 ? "BASELINE:" : $"BASELINE {i + 1} of {baselinePaths.Count}:";
+            var b64 = Convert.ToBase64String(File.ReadAllBytes(baselinePaths[i]));
+            content.Add(new { type = "text", text = label });
+            content.Add(new { type = "image", source = new { type = "base64", media_type = "image/png", data = b64 } });
+        }
+        content.Add(new { type = "text", text = "CAPTURE:" });
+        content.Add(new { type = "image", source = new { type = "base64", media_type = "image/png", data = captureB64 } });
+        content.Add(new { type = "text", text = promptText });
 
         var body = JsonSerializer.Serialize(new
         {
@@ -43,18 +62,7 @@ public static class ClaudeVisionFallback
             temperature = 0.0,
             messages = new[]
             {
-                new
-                {
-                    role = "user",
-                    content = new object[]
-                    {
-                        new { type = "text", text = "BASELINE:" },
-                        new { type = "image", source = new { type = "base64", media_type = "image/png", data = baselineB64 } },
-                        new { type = "text", text = "CAPTURE:" },
-                        new { type = "image", source = new { type = "base64", media_type = "image/png", data = captureB64 } },
-                        new { type = "text", text = promptText },
-                    },
-                },
+                new { role = "user", content = content.ToArray() },
             },
         });
 
