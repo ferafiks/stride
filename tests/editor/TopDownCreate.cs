@@ -30,15 +30,12 @@ public class TopDownCreate : IUITest
         }
         await ctx.WaitFrames(2);
 
-        // Sample templates flow: ProjectSelectionWindow.OK → TemplateSampleGenerator opens
-        // UpdatePlatformsWindow (Windows preselected) → project gen → GameStudioWindow.
-        // (NewGameTemplateGenerator's GameTemplateWindow is for blank-game templates, not samples.)
+        // Sample flow: ProjectSelectionWindow → UpdatePlatformsWindow → project gen → GameStudioWindow.
         if (!await ctx.CloseModalWithOk("ProjectSelectionWindow")) { ctx.Exit(1); return; }
         if (!await ctx.WaitForWindow("UpdatePlatformsWindow", timeoutSeconds: 30)) { ctx.Exit(1); return; }
         if (!await ctx.CloseModalWithOk("UpdatePlatformsWindow")) { ctx.Exit(1); return; }
 
-        // TopDownRPG generation pulls in more assets than NewGame (NavMesh, prefabs, scripts) —
-        // bigger window than the empty-game flow. Cap at 5 min to absorb cold NuGet restore on CI.
+        // TopDownRPG pulls in more assets than NewGame; cap at 5 min for cold NuGet restore on CI.
         if (!await ctx.WaitForWindow("GameStudioWindow", timeoutSeconds: 300)) { ctx.Exit(1); return; }
         await ctx.SetWindowSize("GameStudioWindow", 2560, 1440);
         await ctx.WaitIdle();
