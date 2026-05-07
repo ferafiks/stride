@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Match Stride.GameStudio.AutoTesting's TFM so the project ref is direct-compatible (no
+         TFM-warning suppression needed). 22621 is the Win11 22H2 SDK that exposes
+         GraphicsCaptureSession.IsBorderRequired — relevant only via the ProjectReference. -->
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Stride.Editor.Tests</RootNamespace>
+    <AssemblyName>Stride.Editor.Tests</AssemblyName>
+    <!-- Bundled DLL only — never auto-pack/deploy this. -->
+    <StrideSkipAutoPack>true</StrideSkipAutoPack>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\sources\editor\Stride.GameStudio.AutoTesting\Stride.GameStudio.AutoTesting.csproj" />
+  </ItemGroup>
+</Project>

@@ -60,9 +60,28 @@ public static class Program
     private static readonly ConcurrentQueue<string> LogRingbuffer = new();
     private static bool enableThumbnailServices = true;
 
+    // Startup checkpoints; shared file with the AutoTesting runner.
+    private static readonly string DiagLogPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gs-diag.log");
+    private static void DiagLog(string message)
+    {
+        try { System.IO.File.AppendAllText(DiagLogPath, $"{DateTime.UtcNow:HH:mm:ss.fff} [tid={Thread.CurrentThread.ManagedThreadId}] GS: {message}\n"); }
+        catch { /* best-effort */ }
+    }
+
     [STAThread]
     public static void Main()
     {
+        Run(Environment.GetCommandLineArgs().Skip(1).ToList());
+    }
+
+    /// <summary>
+    /// Editor entry point body. <paramref name="appHosted"/> fires after
+    /// <c>InitializeComponent</c> and before <c>app.Run</c>, giving the AutoTesting runner
+    /// access to the WPF Application + dispatcher.
+    /// </summary>
+    public static void Run(IList<string> args, Action<Application, Dispatcher>? appHosted = null)
+    {
+        DiagLog($"Run entered. args=[{string.Join(", ", args)}]");
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
         EditorPath.EditorTitle = StrideGameStudio.EditorName;
 
@@ -73,7 +92,9 @@ public static class Program
         }
 
         PrivacyPolicyHelper.RestartApplication = RestartApplication;
+        DiagLog("Calling EnsurePrivacyPolicyStride40");
         PrivacyPolicyHelper.EnsurePrivacyPolicyStride40();
+        DiagLog("EnsurePrivacyPolicyStride40 returned");
 
         // We use MRU of the current version only when we're trying to reload last session.
         var mru = new MostRecentlyUsedFileCollection(InternalSettings.LoadProfileCopy, InternalSettings.MostRecentlyUsedSessions, InternalSettings.WriteFile);
@@ -81,14 +102,13 @@ public static class Program
 
         EditorSettings.Initialize();
         Thread.CurrentThread.Name = "Main thread";
+        DiagLog("EditorSettings initialized");
 
         // Install Metrics for the editor
         using (StrideGameStudio.MetricsClient = EditorSettings.EnableMetrics.GetValue() ? new MetricsClient(CommonApps.StrideEditorAppId) : null)
         {
             try
             {
-                // Environment.GetCommandLineArgs correctly process arguments regarding the presence of '\' and '"'
-                var args = Environment.GetCommandLineArgs().Skip(1).ToList();
                 var startupSessionPath = StrideEditorSettings.StartupSession.GetValue();
                 var lastSessionPath = EditorSettings.ReloadLastSession.GetValue() ? mru.MostRecentlyUsedFiles.FirstOrDefault() : null;
                 var initialSessionPath = !UPath.IsNullOrEmpty(startupSessionPath) ? startupSessionPath : lastSessionPath?.FilePath;
@@ -139,6 +159,7 @@ public static class Program
                     }
                 }
                 RuntimeHelpers.RunModuleConstructor(typeof(Asset).Module.ModuleHandle);
+                DiagLog("Asset module constructor ran");
 
                 //listen to logger for crash report
                 GlobalLogger.GlobalMessageLogged += GlobalLoggerOnGlobalMessageLogged;
@@ -148,6 +169,7 @@ public static class Program
 
                 using (new WindowManager(mainDispatcher))
                 {
+                    DiagLog("WindowManager created, constructing App");
                     app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                     app.Activated += (sender, eventArgs) =>
                     {
@@ -158,8 +180,13 @@ public static class Program
                         StrideGameStudio.MetricsClient?.SetActiveState(false);
                     };
 
+                    DiagLog("Calling app.InitializeComponent");
                     app.InitializeComponent();
+                    DiagLog("InitializeComponent returned, invoking appHosted");
+                    appHosted?.Invoke(app, mainDispatcher);
+                    DiagLog("appHosted returned, calling app.Run");
                     app.Run();
+                    DiagLog("app.Run returned");
                 }
 
                 renderDocManager?.RemoveHooks();
