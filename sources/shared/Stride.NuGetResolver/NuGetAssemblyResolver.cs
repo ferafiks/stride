@@ -119,7 +119,12 @@ public static partial class NuGetAssemblyResolver
                             var (request, result) = RestoreHelper.Restore(logger, nugetFramework, RuntimeInformation.RuntimeIdentifier, packageName, versionRange);
                             if (!result.Success)
                             {
-                                throw new InvalidOperationException("Could not restore NuGet packages");
+                                var diagnostics = string.Join(Environment.NewLine,
+                                    logger.Logs
+                                        .Where(l => l.Level >= LogLevel.Warning)
+                                        .Select(l => $"  [{l.Level}] {l.Message}"));
+                                throw new InvalidOperationException(
+                                    $"Could not restore NuGet packages for {packageName} {packageVersion} ({targetFramework}).{Environment.NewLine}{diagnostics}");
                             }
 
                             // Build list of assemblies
