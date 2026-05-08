@@ -1,3 +1,7 @@
+// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net)
+// Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
+
+using System.Collections;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Logging;
 
@@ -27,11 +31,27 @@ Console.WriteLine($"reading {binlogPath}...");
 
 var groups = new Dictionary<string, List<(string FullSig, IReadOnlyDictionary<string, string> Globals, string Parent, string Targets)>>(StringComparer.OrdinalIgnoreCase);
 var contextToProject = new Dictionary<int, string>();
+// Output paths come from ProjectEvaluationFinishedEventArgs (which carries the full evaluated
+// property bag, unlike ProjectStartedEventArgs whose Properties is empty by default). Each
+// evaluation creates a unique ProjectInstanceId; correlate ProjectStarted to its evaluation
+// via that id, since multiple Build invocations on the same evaluation share one OutputPath.
+var evaluationToOutputPath = new Dictionary<int, string>();
 var observed = 0;
 
 var src = new BinaryLogReplayEventSource();
 src.AnyEventRaised += (_, e) =>
 {
+    if (e is ProjectEvaluationFinishedEventArgs pef && pef.BuildEventContext != null && pef.Properties != null)
+    {
+        foreach (var entry in pef.Properties)
+        {
+            if (entry is DictionaryEntry de && de.Key is string k && string.Equals(k, "OutputPath", StringComparison.OrdinalIgnoreCase))
+            {
+                evaluationToOutputPath[pef.BuildEventContext.EvaluationId] = de.Value as string ?? "";
+                break;
+            }
+        }
+    }
     if (e is not ProjectStartedEventArgs ps) return;
 
     var globals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -79,9 +99,23 @@ src.AnyEventRaised += (_, e) =>
 
     observed++;
 
+    // Group by the producer's resolved OutputPath, not by the consumer-side global properties.
+    // Different global property sets that resolve (via project defaults) to the same OutputPath
+    // collide on the same physical files at parallel-build time — that's the actual duplicate
+    // we care about. Property-level grouping misses this (e.g. consumer A passes
+    // StrideGraphicsApi=Direct3D11, consumer B leaves it unset → both produce
+    // bin/.../Direct3D11/, but they form different legit-axes groups).
+    var outputPath = "";
+    var evalId = ps.BuildEventContext?.EvaluationId ?? -1;
+    if (evalId >= 0) evaluationToOutputPath.TryGetValue(evalId, out outputPath!);
+    outputPath ??= "";
+
     var legitSig = string.Join(';', legitAxes.Select(a => $"{a}={(globals.TryGetValue(a, out var v) ? v : "")}"));
     var fullSig = string.Join(';', globals.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value}"));
-    var key = $"{ps.ProjectFile}|{legitSig}";
+    // Fall back to legit-axes when the binlog doesn't carry OutputPath (older MSBuild versions
+    // strip Properties on ProjectStarted unless logged at diagnostic verbosity). Same project
+    // dir + same legit-axes is still a meaningful proxy.
+    var key = $"{ps.ProjectFile}|{(outputPath.Length > 0 ? "out=" + outputPath : "legit=" + legitSig)}";
 
     var parentCtx = ps.ParentProjectBuildEventContext?.ProjectContextId ?? -1;
     var parent = parentCtx >= 0 && contextToProject.TryGetValue(parentCtx, out var pp) ? pp : "<root>";
@@ -109,8 +143,8 @@ var dupes = groups
     .ToList();
 
 Console.WriteLine($"projects observed: {observed}");
-Console.WriteLine($"groups (project + legit-axes): {groups.Count}");
-Console.WriteLine($"groups with leaked-property duplicates: {dupes.Count}");
+Console.WriteLine($"groups (project + output-path): {groups.Count}");
+Console.WriteLine($"groups with duplicate dispatches on the same output: {dupes.Count}");
 Console.WriteLine();
 
 if (Environment.GetEnvironmentVariable("PARALLEL_AUDIT_VERBOSE") == "1")
@@ -128,10 +162,10 @@ foreach (var (key, list) in dupes)
 {
     var parts = key.Split('|', 2);
     var projectFile = parts[0];
-    var legitSig = parts.Length > 1 ? parts[1] : "";
+    var groupedBy = parts.Length > 1 ? parts[1] : "";
 
     Console.WriteLine($"=== {projectFile}");
-    Console.WriteLine($"    legit axes: {legitSig}");
+    Console.WriteLine($"    grouped by: {groupedBy}");
     Console.WriteLine($"    distinct global-property sets: {list.Count}");
     for (int i = 0; i < list.Count; i++)
     {
@@ -141,13 +175,12 @@ foreach (var (key, list) in dupes)
     var allKeys = list.SelectMany(e => e.Globals.Keys).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     var differing = allKeys
         .Where(k => list.Select(e => e.Globals.TryGetValue(k, out var v) ? v : "<unset>").Distinct().Count() > 1)
-        .Except(legitAxes, StringComparer.OrdinalIgnoreCase)
         .OrderBy(x => x, StringComparer.Ordinal)
         .ToList();
 
     if (differing.Count == 0)
     {
-        Console.WriteLine($"    (no differing non-legit properties — likely an axis we should add)");
+        Console.WriteLine($"    (no differing properties)");
     }
     else
     {
