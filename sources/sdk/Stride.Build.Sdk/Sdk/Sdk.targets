@@ -22,7 +22,7 @@
     Rule: User properties from .csproj ARE visible here.
           This is where conditional logic belongs.
 
-    See: build/docs/SDK-GUIDE.md#property-evaluation-order
+    See: docs/build/SDK-GUIDE.md#property-evaluation-order
     ================================================================
   -->
 
