@@ -20,9 +20,6 @@ When installing VS 2026, make sure these are selected:
 - **Visual Studio extension development** + **.NET Framework 4.7.2 targeting pack** — to build the VSIX package.
 
 > [!NOTE]
-> Why v145 specifically? Stride pins to v145 to keep release binaries reproducible across contributors and CI. Bumping the pin is roughly a 3-4 year cadence (once per VS major release).
-
-> [!NOTE]
 > The Visual Studio install with C++ + .NET workloads typically uses ~19 GB of disk space.
 
 > [!WARNING]
