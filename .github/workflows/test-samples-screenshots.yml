@@ -11,8 +11,8 @@ on:
           - Debug
           - Release
   schedule:
-    # Daily at 04:00 UTC.
-    - cron: '0 4 * * *'
+    # Daily at 04:37 UTC — offset off top-of-hour to avoid GitHub Actions cron load spikes.
+    - cron: '37 4 * * *'
 
 concurrency:
   group: test-samples-screenshots-${{ github.ref }}

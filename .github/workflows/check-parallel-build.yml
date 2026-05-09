@@ -13,8 +13,8 @@ on:
       - 'Directory.Build.targets'
     types: [opened, synchronize, reopened, ready_for_review]
   schedule:
-    # 04:00 UTC daily
-    - cron: '0 4 * * *'
+    # 04:17 UTC daily — offset off top-of-hour to avoid GitHub Actions cron load spikes.
+    - cron: '17 4 * * *'
   workflow_dispatch:
 
 jobs:
