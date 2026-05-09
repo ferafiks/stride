@@ -5,8 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Stride.SampleScreenshotComparator;
 using Stride.SampleScreenshotRunner;
+using Stride.Tests.ScreenshotComparator;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -67,17 +67,18 @@ namespace Stride.Samples.Tests
 
             // Compare: in-proc LPIPS against committed baselines. --sample isolates this test from
             // earlier theory entries that may have left captures in the same captureRoot.
-            var modelPath = Path.Combine(worktree, "samples", "Tests", "Comparator", "models", "lpips_alex.onnx");
+            // ScreenshotComparator defaults to <bin>/models/lpips_alex.onnx, which the shared
+            // Stride.ScreenshotComparator project copies into our output via ProjectReference.
             var baselineDir = Path.Combine(worktree, "tests", "Stride.Samples.Tests");
-            var results = ScreenshotComparator.Compare(captureRoot, baselineDir, sampleFilter: name, modelPath: modelPath);
+            var results = ScreenshotComparator.Compare(captureRoot, baselineDir, sampleFilter: name);
 
             foreach (var r in results)
             {
                 var d = r.Lpips.HasValue ? $"lpips={r.Lpips.Value:F4} thr={r.Threshold:F2}" : "";
                 output.WriteLine($"[compare] {r.Status,-7} {r.Frame,-20} {d}{(r.Detail is null ? "" : "  " + r.Detail)}");
             }
-            var drift = results.Where(r => r.Status is "drift" or "error").ToList();
-            Assert.Empty(drift);
+            var failures = results.Where(r => r.Status is "drift" or "error" or "new").ToList();
+            Assert.Empty(failures);
 
             // Test passed — wipe the regenerated sample dir to keep working trees small. Skip on
             // failure so the post-mortem still has the regenerated project for local debugging.
