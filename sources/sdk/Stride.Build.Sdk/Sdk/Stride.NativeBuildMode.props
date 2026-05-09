@@ -6,8 +6,9 @@
   -->
 
   <PropertyGroup>
-    <!-- MSVC when targeting Windows (or unset) AND the VS C++ tools are loaded in the current shell, Clang otherwise. -->
-    <StrideNativeBuildMode Condition="'$(StrideNativeBuildMode)' == '' And ('$(StridePlatform)' == '' Or '$(StridePlatform)' == 'Windows') And '$(VCINSTALLDIR)' != ''">MSVC</StrideNativeBuildMode>
+    <!-- MSVC requires: targeting Windows, VS C++ tools loaded (VCINSTALLDIR), and MSBuild.exe runtime
+         (dotnet build / dotnet msbuild use Core MSBuild which can't load the Framework-only CppTasks). -->
+    <StrideNativeBuildMode Condition="'$(StrideNativeBuildMode)' == '' And ('$(StridePlatform)' == '' Or '$(StridePlatform)' == 'Windows') And '$(VCINSTALLDIR)' != '' And '$(MSBuildRuntimeType)' == 'Full'">MSVC</StrideNativeBuildMode>
     <StrideNativeBuildMode Condition="'$(StrideNativeBuildMode)' == ''">Clang</StrideNativeBuildMode>
   </PropertyGroup>
 

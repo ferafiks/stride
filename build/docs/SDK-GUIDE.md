@@ -457,6 +457,36 @@ Common option combinations:
 
 ---
 
+## Native Build Mode (Clang / MSVC)
+
+Native C++ projects (`.vcxproj` under `sources/native/`) are built using one of two toolchains, selected by `Stride.NativeBuildMode.props`:
+
+| Mode | Compiler | Linker | Output |
+|------|----------|--------|--------|
+| **MSVC** | clang | MSVC `link.exe` | Windows PE |
+| **Clang** | clang | LLVM LLD | PE / ELF / Mach-O (cross-platform) |
+
+Auto-selection rules (in order):
+
+1. Explicit override via `-p:StrideNativeBuildMode=Clang|MSVC`, env var, or property → wins.
+2. Cross-compile (`StridePlatform` set to anything but `Windows`) → **Clang** (MSVC linker can't produce ELF/Mach-O).
+3. `VCINSTALLDIR` set (VS Developer Command Prompt) **AND** `MSBuildRuntimeType == Full` (running under `MSBuild.exe`, not `dotnet build`) → **MSVC**.
+4. Everything else → **Clang**.
+
+The `MSBuildRuntimeType == Full` requirement is load-bearing: the .NET Core MSBuild engine used by `dotnet build` and `dotnet msbuild` cannot build `.vcxproj` end-to-end (it loads the Cpp targets but fails at task execution because `Microsoft.Build.CPPTasks.Common` depends on the Framework-only `Microsoft.Build.Utilities.Core`). Without this gate, `dotnet build` from a Developer Command Prompt would pick MSVC and fail with `MSB4278` / `TypeLoadException`. Refs: [dotnet/msbuild#6482](https://github.com/dotnet/msbuild/issues/6482), [dotnet/sdk#10239](https://github.com/dotnet/sdk/issues/10239).
+
+Practical effect:
+
+| Shell | Tool | Mode |
+|-------|------|------|
+| Regular shell on Windows | `dotnet build` | Clang |
+| VS Developer Command Prompt | `MSBuild.exe` | MSVC |
+| VS Developer Command Prompt | `dotnet build` / `dotnet msbuild` | Clang |
+| VS IDE | (msbuild.exe) | MSVC |
+| Linux/macOS | `dotnet build` | Clang |
+
+---
+
 ## Native Dependencies (.ssdeps)
 
 The `.ssdeps` system (`Stride.Dependencies.targets`) handles native library distribution:
