@@ -33,6 +33,8 @@
     <!-- Pin WARP for reproducible D3D11 software-rendering captures on dev machines and CI.
          Side-by-side d3d10warp.dll wins the loader search over the OS-bundled one. -->
     <PackageReference Include="Microsoft.Direct3D.WARP" GeneratePathProperty="true" />
+    <!-- Direct typed access to LayoutAnchorable in CapturePanel/FloatAnchorable. -->
+    <PackageReference Include="Dirkster.AvalonDock" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="$(PkgMicrosoft_Direct3D_WARP)\build\native\bin\x64\d3d10warp.dll"

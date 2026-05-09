@@ -92,9 +92,7 @@ public static class Program
         }
 
         PrivacyPolicyHelper.RestartApplication = RestartApplication;
-        DiagLog("Calling EnsurePrivacyPolicyStride40");
         PrivacyPolicyHelper.EnsurePrivacyPolicyStride40();
-        DiagLog("EnsurePrivacyPolicyStride40 returned");
 
         // We use MRU of the current version only when we're trying to reload last session.
         var mru = new MostRecentlyUsedFileCollection(InternalSettings.LoadProfileCopy, InternalSettings.MostRecentlyUsedSessions, InternalSettings.WriteFile);
@@ -102,7 +100,6 @@ public static class Program
 
         EditorSettings.Initialize();
         Thread.CurrentThread.Name = "Main thread";
-        DiagLog("EditorSettings initialized");
 
         // Install Metrics for the editor
         using (StrideGameStudio.MetricsClient = EditorSettings.EnableMetrics.GetValue() ? new MetricsClient(CommonApps.StrideEditorAppId) : null)
@@ -159,7 +156,6 @@ public static class Program
                     }
                 }
                 RuntimeHelpers.RunModuleConstructor(typeof(Asset).Module.ModuleHandle);
-                DiagLog("Asset module constructor ran");
 
                 //listen to logger for crash report
                 GlobalLogger.GlobalMessageLogged += GlobalLoggerOnGlobalMessageLogged;
@@ -169,7 +165,6 @@ public static class Program
 
                 using (new WindowManager(mainDispatcher))
                 {
-                    DiagLog("WindowManager created, constructing App");
                     app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                     app.Activated += (sender, eventArgs) =>
                     {
@@ -180,11 +175,9 @@ public static class Program
                         StrideGameStudio.MetricsClient?.SetActiveState(false);
                     };
 
-                    DiagLog("Calling app.InitializeComponent");
                     app.InitializeComponent();
-                    DiagLog("InitializeComponent returned, invoking appHosted");
                     appHosted?.Invoke(app, mainDispatcher);
-                    DiagLog("appHosted returned, calling app.Run");
+                    DiagLog("calling app.Run");
                     app.Run();
                     DiagLog("app.Run returned");
                 }

@@ -121,19 +121,35 @@ internal static class GraphicsCaptureClient
         finally { WindowsDeleteString(hstring); }
     }
 
-    public static unsafe Task CaptureToPngAsync(IntPtr hwnd, string path)
+    /// <summary>Resources held open while a WGC capture session is active. Disposed via <see cref="CloseSession"/>.</summary>
+    private sealed unsafe class CaptureSessionHandle
+    {
+        public GraphicsCaptureSession Session;
+        public Direct3D11CaptureFramePool FramePool;
+        public IntPtr DeviceAbi;
+        public IntPtr ContextAbi;
+        public IntPtr Hwnd;
+        public bool Promoted;
+        public long OrigExStyle;
+        public long OrigOwner;
+    }
+
+    /// <summary>
+    /// Creates a GraphicsCaptureItem from the HWND (with WS_EX_APPWINDOW promotion fallback for
+    /// owned/transient windows), spins up a D3D11 device + framepool + session, and returns a
+    /// handle. The caller must attach its FrameArrived handler before calling
+    /// <see cref="StartCaptureAndNudge"/>, then dispose via <see cref="CloseSession"/>.
+    /// </summary>
+    private static unsafe CaptureSessionHandle OpenSession(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) throw new ArgumentException("HWND is zero.", nameof(hwnd));
 
-        // 1. HWND → GraphicsCaptureItem via the activation factory's IGraphicsCaptureItemInterop.
+        // 1. HWND → GraphicsCaptureItem. WGC rejects owned/transient/no-AppWindow windows (e.g.
+        // AvalonDock floating panels) with E_INVALIDARG — promote temporarily by clearing owner
+        // and adding WS_EX_APPWINDOW; restore in CloseSession.
         var itemFactory = GetActivationFactory<IGraphicsCaptureItemInterop>("Windows.Graphics.Capture.GraphicsCaptureItem");
         var itemIid = IID_IGraphicsCaptureItem;
         var createHr = itemFactory.CreateForWindow(hwnd, ref itemIid, out var itemAbi);
-
-        // WGC rejects owned/transient/no-AppWindow windows (e.g. AvalonDock floating panels) with
-        // E_INVALIDARG — see Microsoft's IsCapturableWindow sample. Promote temporarily: clear
-        // owner and add WS_EX_APPWINDOW. The window must stay promoted through capture, so we
-        // hand the original style/owner to the async helper to restore in its finally block.
         long origExStyle = 0, origOwner = 0;
         var promoted = false;
         if (createHr == E_INVALIDARG)
@@ -160,7 +176,7 @@ internal static class GraphicsCaptureClient
         try { item = MarshalInterface<GraphicsCaptureItem>.FromAbi(itemAbi); }
         finally { Marshal.Release(itemAbi); }
 
-        // 2. Create a D3D11 device. BGRA support is required for the WGC framepool.
+        // 2. D3D11 device (BGRA support required for WGC framepool).
         var d3d11 = D3D11.GetApi(null);
         ID3D11Device* devicePtr = null;
         ID3D11DeviceContext* contextPtr = null;
@@ -186,13 +202,11 @@ internal static class GraphicsCaptureClient
         }
         finally { dxgiDevice->Release(); }
 
-        // 4. Framepool + session. CreateFreeThreaded dispatches FrameArrived on a threadpool
-        //    thread; the regular Create requires a DispatcherQueue on the calling thread.
+        // 4. Framepool + session. CreateFreeThreaded dispatches FrameArrived on a threadpool thread.
         var size = item.Size;
         DiagLog($"item.Size={size.Width}x{size.Height} hwnd=0x{hwnd.ToInt64():X}");
         if (size.Width <= 0 || size.Height <= 0)
         {
-            // Fall back to GetClientRect-derived size — happens if WPF hasn't fully laid out yet.
             if (GetClientRect(hwnd, out var rect))
             {
                 size.Width = rect.Right - rect.Left;
@@ -200,7 +214,7 @@ internal static class GraphicsCaptureClient
                 DiagLog($"WGC: fell back to GetClientRect → {size.Width}x{size.Height}");
             }
             if (size.Width <= 0 || size.Height <= 0)
-                throw new InvalidOperationException($"GraphicsCaptureItem reports zero size and GetClientRect failed; window not yet realised.");
+                throw new InvalidOperationException("GraphicsCaptureItem reports zero size and GetClientRect failed; window not yet realised.");
         }
         var framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
             graphicsDevice,
@@ -215,7 +229,66 @@ internal static class GraphicsCaptureClient
         if (ApiInformation.IsPropertyPresent(GraphicsCaptureSessionType, "IsCursorCaptureEnabled"))
             session.IsCursorCaptureEnabled = false;
 
+        // Diagnostics: WS_EX_NOREDIRECTIONBITMAP excludes from DWM redirection (and so from WGC);
+        // WDA_EXCLUDEFROMCAPTURE opts out of capture entirely.
+        var exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        GetWindowDisplayAffinity(hwnd, out var affinity);
+        DiagLog($"Styles: exStyle=0x{exStyle:X} NoRedirBitmap={(exStyle & WS_EX_NOREDIRECTIONBITMAP) != 0} affinity=0x{affinity:X} ExcludeFromCapture={affinity == WDA_EXCLUDEFROMCAPTURE}");
+
+        // With numberOfBuffers=1, any frame produced before the FrameArrived handler is attached
+        // cycles through the pool without firing the event. Caller attaches its handler then
+        // calls StartCaptureAndNudge.
+        return new CaptureSessionHandle
+        {
+            Session = session,
+            FramePool = framePool,
+            DeviceAbi = (IntPtr)devicePtr,
+            ContextAbi = (IntPtr)contextPtr,
+            Hwnd = hwnd,
+            Promoted = promoted,
+            OrigExStyle = origExStyle,
+            OrigOwner = origOwner,
+        };
+    }
+
+    /// <summary>
+    /// Starts a capture session opened via <see cref="OpenSession"/> after the caller has attached
+    /// its FrameArrived handler. Nudges the window so DWM produces composition.
+    /// </summary>
+    private static void StartCaptureAndNudge(CaptureSessionHandle handle)
+    {
+        // WGC only delivers FrameArrived when DWM presents new composition; nudge the window.
+        var fg = SetForegroundWindow(handle.Hwnd);
+        var sw = ShowWindow(handle.Hwnd, SW_RESTORE);
+        var rd = RedrawWindow(handle.Hwnd, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        DiagLog($"Nudge: SetForegroundWindow={fg} ShowWindow={sw} RedrawWindow={rd}");
+
+        handle.Session.StartCapture();
+        DiagLog("StartCapture returned");
+
+        try { DwmFlush(); }
+        catch (Exception ex) { DiagLog($"DwmFlush threw: {ex.Message}"); }
+    }
+
+    private static void CloseSession(CaptureSessionHandle h)
+    {
+        h.Session?.Dispose();
+        h.FramePool?.Dispose();
+        ReleasePointer(h.ContextAbi);
+        ReleasePointer(h.DeviceAbi);
+        if (h.Promoted)
+        {
+            SetWindowLongPtrW(h.Hwnd, GWLP_HWNDPARENT, h.OrigOwner);
+            SetWindowLongPtrW(h.Hwnd, GWL_EXSTYLE, h.OrigExStyle);
+        }
+    }
+
+    public static Task CaptureToPngAsync(IntPtr hwnd, string path)
+    {
+        var handle = OpenSession(hwnd);
+
         var tcs = new TaskCompletionSource<Direct3D11CaptureFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var framePool = handle.FramePool;
         int frameCallbackCount = 0;
         Windows.Foundation.TypedEventHandler<Direct3D11CaptureFramePool, object> handler = null!;
         handler = (sender, _) =>
@@ -228,44 +301,53 @@ internal static class GraphicsCaptureClient
             tcs.TrySetResult(frame);
         };
         framePool.FrameArrived += handler;
-
-        // Diagnostics: WS_EX_NOREDIRECTIONBITMAP excludes from DWM redirection (and so from WGC);
-        // WDA_EXCLUDEFROMCAPTURE opts out of capture entirely.
-        var exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        GetWindowDisplayAffinity(hwnd, out var affinity);
-        DiagLog($"Styles: exStyle=0x{exStyle:X} NoRedirBitmap={(exStyle & WS_EX_NOREDIRECTIONBITMAP) != 0} affinity=0x{affinity:X} ExcludeFromCapture={affinity == WDA_EXCLUDEFROMCAPTURE}");
-
-        // WGC only delivers FrameArrived when DWM presents new composition; nudge the window so
-        // the first frame arrives.
-        var fg = SetForegroundWindow(hwnd);
-        var sw = ShowWindow(hwnd, SW_RESTORE);
-        var rd = RedrawWindow(hwnd, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-        DiagLog($"Nudge: SetForegroundWindow={fg} ShowWindow={sw} RedrawWindow={rd}");
-
-        session.StartCapture();
-        DiagLog("StartCapture returned");
-
-        // DwmFlush blocks until DWM advances its composition — guarantees at least one frame
-        // pass that WGC can pick up.
-        try { DwmFlush(); DiagLog("DwmFlush returned"); }
-        catch (Exception ex) { DiagLog($"DwmFlush threw: {ex.Message}"); }
-
-        // Hand off to the async helper as IntPtrs (managed pointers can't cross an await).
-        return WaitAndEncodeAsync(tcs.Task, (IntPtr)devicePtr, (IntPtr)contextPtr, framePool, session, path,
-            hwnd, promoted, origExStyle, origOwner);
+        StartCaptureAndNudge(handle);
+        return WaitAndEncodeAsync(tcs.Task, handle, path);
     }
 
-    private static async Task WaitAndEncodeAsync(
-        Task<Direct3D11CaptureFrame> frameTask,
-        IntPtr deviceAbi,
-        IntPtr contextAbi,
-        Direct3D11CaptureFramePool framePool,
-        GraphicsCaptureSession session,
-        string path,
-        IntPtr hwnd,
-        bool promoted,
-        long origExStyle,
-        long origOwner)
+    /// <summary>
+    /// Returns when at least <paramref name="minFrames"/> FrameArrived events have fired AND
+    /// <paramref name="postFirstFrameDelaySeconds"/> have elapsed since the first.
+    /// </summary>
+    public static async Task WaitForFramesAsync(IntPtr hwnd, int minFrames, double postFirstFrameDelaySeconds, double timeoutSeconds)
+    {
+        var handle = OpenSession(hwnd);
+        var framePool = handle.FramePool;
+        var firstFrameAt = DateTime.MinValue;
+        var count = 0;
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Windows.Foundation.TypedEventHandler<Direct3D11CaptureFramePool, object> handler = null!;
+        handler = (sender, _) =>
+        {
+            using var f = sender.TryGetNextFrame();
+            if (f is null) return;
+            var n = System.Threading.Interlocked.Increment(ref count);
+            if (n == 1) firstFrameAt = DateTime.UtcNow;
+            if (n >= minFrames && (DateTime.UtcNow - firstFrameAt).TotalSeconds >= postFirstFrameDelaySeconds)
+            {
+                framePool.FrameArrived -= handler;
+                done.TrySetResult(true);
+            }
+        };
+        framePool.FrameArrived += handler;
+        StartCaptureAndNudge(handle);
+
+        try
+        {
+            var winner = await Task.WhenAny(done.Task, Task.Delay(TimeSpan.FromSeconds(timeoutSeconds))).ConfigureAwait(false);
+            if (winner != done.Task)
+                DiagLog($"WaitForFramesAsync: timed out after {timeoutSeconds}s with count={count} firstFrameAt={(firstFrameAt == DateTime.MinValue ? "(none)" : firstFrameAt.ToString("HH:mm:ss.fff"))}");
+            else
+                DiagLog($"WaitForFramesAsync: completed with count={count} elapsedSinceFirstFrame={(DateTime.UtcNow - firstFrameAt).TotalSeconds:F2}s");
+        }
+        finally
+        {
+            CloseSession(handle);
+        }
+    }
+
+    private static async Task WaitAndEncodeAsync(Task<Direct3D11CaptureFrame> frameTask, CaptureSessionHandle handle, string path)
     {
         try
         {
@@ -273,19 +355,11 @@ internal static class GraphicsCaptureClient
             if (winner != frameTask)
                 throw new TimeoutException("WGC FrameArrived didn't fire within 10s; window may be occluded or DWM isn't compositing it.");
             using var frame = await frameTask.ConfigureAwait(false);
-            EncodeFrameToPng(frame, deviceAbi, contextAbi, path);
+            EncodeFrameToPng(frame, handle.DeviceAbi, handle.ContextAbi, path);
         }
         finally
         {
-            session.Dispose();
-            framePool.Dispose();
-            ReleasePointer(contextAbi);
-            ReleasePointer(deviceAbi);
-            if (promoted)
-            {
-                SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, origOwner);
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, origExStyle);
-            }
+            CloseSession(handle);
         }
     }
 

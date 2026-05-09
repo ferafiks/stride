@@ -5,6 +5,7 @@
 // ProjectSelectionWindow, accept the platform dialog, wait for GameStudioWindow.
 using System;
 using System.Threading.Tasks;
+using Stride.Assets;
 using Stride.GameStudio.AutoTesting;
 
 namespace Stride.Editor.Tests;
@@ -23,7 +24,7 @@ public class TopDownCreate : IUITest
         }
         await Task.Delay(TimeSpan.FromSeconds(1)); // templates panel populate
 
-        if (!await ctx.SelectTemplate("A363FBC5-89EF-4E7A-B870-6D070813D034"))
+        if (!await ctx.SelectTemplate(new Guid("A363FBC5-89EF-4E7A-B870-6D070813D034")))
         {
             ctx.Exit(1);
             return;
@@ -46,8 +47,8 @@ public class TopDownCreate : IUITest
         await ctx.CapturePanel("SolutionExplorer", "panel-solution", 700, 900);
         await ctx.CapturePanel("References", "panel-references", 700, 900);
         await ctx.CapturePanel("BuildLog", "panel-buildlog", 1200, 900);
-        // Scene editor document — Title is the asset URL ("MainScene" for TopDownRPG).
-        await ctx.CapturePanel("MainScene", "scene-main", 1400, 900);
+        // Scene editor document — Title is the asset URL.
+        await ctx.CapturePanel(GameSettingsAsset.DefaultSceneLocation, "scene-main", 1400, 900);
 
         ctx.Exit();
     }

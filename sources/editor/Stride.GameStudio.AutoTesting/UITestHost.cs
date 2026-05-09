@@ -3,9 +3,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -13,16 +15,29 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using AvalonDock.Layout;
+using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.EntityFactories;
+using Stride.Assets.Presentation.AssetEditors.EntityHierarchyEditor.ViewModels;
+using Stride.Assets.Presentation.AssetEditors.GameEditor.Services;
+using Stride.Assets.Presentation.AssetEditors.GameEditor.ViewModels;
+using Stride.Assets.Presentation.AssetEditors.SceneEditor.ViewModels;
+using Stride.GameStudio.AssetsEditors;
 using Stride.Core.Assets.Editor.Components.TemplateDescriptions.ViewModels;
 using Stride.Core.Assets.Editor.Components.TemplateDescriptions.Views;
 using Stride.Core.Assets.Editor.Services;
+using Stride.Core.Assets.Editor.View;
 using Stride.Core.Assets.Editor.ViewModel;
+using Stride.Core.Assets.Templates;
+using Stride.Core.Mathematics;
 using Stride.Core.Presentation.Controls;
 using Stride.Core.Presentation.Services;
+using Stride.Core.Serialization;
 using Stride.Editor.Build;
 using Stride.Editor.EditorGame.Game;
 using Stride.Editor.Preview;
+using Stride.Engine;
 using Stride.GameStudio.ViewModels;
+using Stride.Rendering;
 
 namespace Stride.GameStudio.AutoTesting;
 
@@ -190,10 +205,8 @@ internal sealed class UITestHost
         try
         {
             var donePath = Path.Combine(outputDir, DoneFileName);
-            // claudeFallback=true on every editor frame: the editor UI naturally drifts
-            // (asset-thumbnail render order, scroll positions, scene-camera framing) and LPIPS
-            // alone produces too many false positives. Claude vision only fires on frames that
-            // already exceed the LPIPS threshold, so cost is bounded.
+            // Editor UI drifts nondeterministically; Claude fallback fires only when LPIPS exceeds
+            // threshold so cost is bounded.
             var payload = new
             {
                 status,
@@ -316,49 +329,14 @@ internal sealed class UITestHost
             if (previewSvc?.PreviewGame is { IsRunning: true } previewGame)
                 list.Add(new WatchedGame(previewGame, previewGame.DrawTime?.FrameCount ?? 0));
 
-            // 2) Each open asset editor's embedded game. Multiple scene/prefab/UI/sprite documents
-            //    can be open simultaneously — collect each one's running game.
-            var aem = session.ServiceProvider.TryGet<IAssetEditorsManager>();
-            if (aem is null) return list;
-            var assetEditorsField = aem.GetType().GetField("assetEditors", BindingFlags.NonPublic | BindingFlags.Instance);
-            if (assetEditorsField?.GetValue(aem) is not IDictionary assetEditors) return list;
-            foreach (var editorVm in assetEditors.Keys)
+            // 2) Each open asset editor's embedded game.
+            if (session.ServiceProvider.TryGet<IAssetEditorsManager>() is not AssetEditorsManager aem) return list;
+            foreach (var editorVm in aem.EditorViewModels)
             {
-                if (editorVm is null) continue;
-                try
-                {
-                    // Walk declared-only because SceneEditorViewModel etc. shadow GameEditorViewModel.Controller
-                    // with a more-derived return type — a flat GetProperty("Controller") triggers AmbiguousMatchException.
-                    var controllerProp = FindMemberDeclaredOnly(editorVm.GetType(), t => t.GetProperty("Controller",
-                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
-                    if (controllerProp?.GetValue(editorVm) is not { } controller) continue;
-                    var gameField = FindMemberDeclaredOnly(controller.GetType(), t => t.GetField("Game",
-                        BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly));
-                    if (gameField?.GetValue(controller) is EditorServiceGame game && game.IsRunning)
-                        list.Add(new WatchedGame(game, game.DrawTime?.FrameCount ?? 0));
-                }
-                catch (Exception ex)
-                {
-                    host.Log($"WaitForRendering: skipping editor '{editorVm.GetType().Name}': {ex.GetType().Name}: {ex.Message}");
-                }
+                if (editorVm is GameEditorViewModel { Controller: IEditorGameAccess access } && access.EditorGame is { IsRunning: true } game)
+                    list.Add(new WatchedGame(game, game.DrawTime?.FrameCount ?? 0));
             }
             return list;
-        }
-
-        /// <summary>
-        /// Walks <paramref name="t"/> + base types, returning the first member found by <paramref name="lookup"/>.
-        /// Caller passes a DeclaredOnly lookup so each level is searched independently — sidesteps
-        /// AmbiguousMatchException from new-slot/shadowed members across the hierarchy.
-        /// </summary>
-        private static T? FindMemberDeclaredOnly<T>(Type? t, Func<Type, T?> lookup) where T : class
-        {
-            while (t is not null)
-            {
-                var hit = lookup(t);
-                if (hit is not null) return hit;
-                t = t.BaseType;
-            }
-            return null;
         }
 
         /// <summary>
@@ -465,25 +443,23 @@ internal sealed class UITestHost
             return false;
         }
 
-        public Task<bool> SelectTemplate(string templateGuid) =>
+        public Task<bool> SelectTemplate(Guid templateId) =>
             host.dispatcher.InvokeAsync(() =>
             {
-                host.Log($"SelectTemplate: '{templateGuid}'");
+                host.Log($"SelectTemplate: {templateId}");
                 var app = Application.Current;
                 if (app is null) return false;
                 var win = app.Windows.OfType<ProjectSelectionWindow>().FirstOrDefault();
                 if (win is null) { host.Log("SelectTemplate: ProjectSelectionWindow not found"); return false; }
                 var collection = win.Templates;
                 if (collection is null) { host.Log("SelectTemplate: ProjectSelectionWindow.Templates is null"); return false; }
-                if (!Guid.TryParse(templateGuid, out var targetId))
-                { host.Log($"SelectTemplate: '{templateGuid}' is not a valid GUID"); return false; }
                 // Templates is the per-group filtered view; full set lives behind RootGroups.
                 var candidates = collection.Templates
                     .Concat(collection.RootGroups.SelectMany(g => g.GetTemplatesRecursively()))
                     .ToList();
-                var match = candidates.FirstOrDefault(t => t.Id == targetId);
+                var match = candidates.FirstOrDefault(t => t.Id == templateId);
                 if (match is null)
-                { host.Log($"SelectTemplate: no template with Id={templateGuid} in {candidates.Count} candidates"); return false; }
+                { host.Log($"SelectTemplate: no template with Id={templateId} in {candidates.Count} candidates"); return false; }
                 collection.SelectedTemplate = match;
                 host.Log($"SelectTemplate: selected '{match.GetType().Name}' (Id={match.Id})");
                 return true;
@@ -527,14 +503,13 @@ internal sealed class UITestHost
                 win.SetCurrentValue(Window.LeftProperty, work.Left + Math.Max(0.0, (work.Width - w) / 2.0));
                 win.SetCurrentValue(Window.TopProperty, work.Top + Math.Max(0.0, (work.Height - h) / 2.0));
                 win.UpdateLayout();
-                host.Log($"SetWindowSize: after — Width={win.Width} Height={win.Height} Actual={win.ActualWidth}x{win.ActualHeight} State={win.WindowState}");
             }, DispatcherPriority.Render).Task.ConfigureAwait(false);
 
         public async Task CapturePanel(string idOrTitle, string name, int width = 1200, int height = 900)
         {
             host.Log($"CapturePanel: id='{idOrTitle}' name='{name}' size={width}x{height}");
             var path = Path.Combine(host.outputDir, ScreenshotsDir, name + ".png");
-            object? anchorable = null;
+            LayoutAnchorable? anchorable = null;
             AnchorableState? originalState = null;
             try
             {
@@ -603,44 +578,26 @@ internal sealed class UITestHost
             return null;
         }
 
-        /// <summary>Finds the FrameworkElement hosting an AvalonDock panel by <c>ContentId</c>.</summary>
-        private static FrameworkElement? FindPanelContent(string contentId)
+        /// <summary>Finds the AvalonDock <see cref="LayoutAnchorable"/> with the matching <c>ContentId</c>.</summary>
+        private static LayoutAnchorable? FindAnchorable(string contentId)
         {
             var app = Application.Current;
             if (app is null) return null;
             foreach (var w in app.Windows.OfType<Window>())
             {
-                var hit = SearchTree(w, contentId, returnElement: true) as FrameworkElement;
-                if (hit is not null) return hit;
-            }
-            return null;
-        }
-
-        /// <summary>Finds the AvalonDock LayoutAnchorable (DataContext object with the matching <c>ContentId</c>).</summary>
-        private static object? FindAnchorable(string contentId)
-        {
-            var app = Application.Current;
-            if (app is null) return null;
-            foreach (var w in app.Windows.OfType<Window>())
-            {
-                var hit = SearchTree(w, contentId, returnElement: false);
-                if (hit is not null) return hit;
+                if (SearchTree(w, contentId, returnElement: false) is LayoutAnchorable hit) return hit;
             }
             return null;
         }
 
         private static object? SearchTree(DependencyObject node, string idOrTitle, bool returnElement)
         {
-            if (node is FrameworkElement fe && fe.DataContext is { } dc)
-            {
-                var t = dc.GetType();
-                // Anchorables (panels) match by ContentId; documents (asset editors) typically have
-                // an empty ContentId and identify via Title (the asset URL).
-                if (t.GetProperty("ContentId")?.GetValue(dc) is string cid && string.Equals(cid, idOrTitle, StringComparison.Ordinal))
-                    return returnElement ? fe : dc;
-                if (t.GetProperty("Title")?.GetValue(dc) is string title && string.Equals(title, idOrTitle, StringComparison.Ordinal))
-                    return returnElement ? fe : dc;
-            }
+            // Anchorables (panels) match by ContentId; documents (asset editors) typically have
+            // an empty ContentId and identify via Title (the asset URL).
+            if (node is FrameworkElement fe && fe.DataContext is LayoutContent lc
+                && (string.Equals(lc.ContentId, idOrTitle, StringComparison.Ordinal)
+                    || string.Equals(lc.Title, idOrTitle, StringComparison.Ordinal)))
+                return returnElement ? fe : lc;
             var count = VisualTreeHelper.GetChildrenCount(node);
             for (var i = 0; i < count; i++)
             {
@@ -653,30 +610,230 @@ internal sealed class UITestHost
 
         private readonly record struct AnchorableState(bool WasAutoHidden, bool WasFloating, double OldFloatingWidth, double OldFloatingHeight);
 
-        private static AnchorableState FloatAnchorable(object anchorable, int width, int height)
+        private static AnchorableState FloatAnchorable(LayoutAnchorable anchorable, int width, int height)
         {
-            var t = anchorable.GetType();
-            var wasAutoHidden = (bool?)t.GetProperty("IsAutoHidden")?.GetValue(anchorable) ?? false;
-            var wasFloating = (bool?)t.GetProperty("IsFloating")?.GetValue(anchorable) ?? false;
-            var oldFW = (double?)t.GetProperty("FloatingWidth")?.GetValue(anchorable) ?? 0;
-            var oldFH = (double?)t.GetProperty("FloatingHeight")?.GetValue(anchorable) ?? 0;
-            // Auto-hidden panels need to be expanded before Float() can move them, otherwise the
-            // anchorable is still parented to the auto-hide pane and the call no-ops.
-            if (wasAutoHidden) t.GetMethod("ToggleAutoHide")?.Invoke(anchorable, null);
-            t.GetProperty("FloatingWidth")?.SetValue(anchorable, (double)width);
-            t.GetProperty("FloatingHeight")?.SetValue(anchorable, (double)height);
-            if (!wasFloating) t.GetMethod("Float")?.Invoke(anchorable, null);
-            return new AnchorableState(wasAutoHidden, wasFloating, oldFW, oldFH);
+            var state = new AnchorableState(anchorable.IsAutoHidden, anchorable.IsFloating, anchorable.FloatingWidth, anchorable.FloatingHeight);
+            // Auto-hidden panels must be expanded before Float() can move them; otherwise the
+            // anchorable stays parented to the auto-hide pane and Float() no-ops.
+            if (state.WasAutoHidden) anchorable.ToggleAutoHide();
+            anchorable.FloatingWidth = width;
+            anchorable.FloatingHeight = height;
+            if (!state.WasFloating) anchorable.Float();
+            return state;
         }
 
-        private static void RestoreAnchorable(object anchorable, AnchorableState state)
+        private static void RestoreAnchorable(LayoutAnchorable anchorable, AnchorableState state)
         {
-            var t = anchorable.GetType();
-            if (!state.WasFloating) t.GetMethod("Dock")?.Invoke(anchorable, null);
-            t.GetProperty("FloatingWidth")?.SetValue(anchorable, state.OldFloatingWidth);
-            t.GetProperty("FloatingHeight")?.SetValue(anchorable, state.OldFloatingHeight);
-            var nowAutoHidden = (bool?)t.GetProperty("IsAutoHidden")?.GetValue(anchorable) ?? false;
-            if (state.WasAutoHidden && !nowAutoHidden) t.GetMethod("ToggleAutoHide")?.Invoke(anchorable, null);
+            if (!state.WasFloating) anchorable.Dock();
+            anchorable.FloatingWidth = state.OldFloatingWidth;
+            anchorable.FloatingHeight = state.OldFloatingHeight;
+            if (state.WasAutoHidden && !anchorable.IsAutoHidden) anchorable.ToggleAutoHide();
+        }
+
+        public Task<int> RunProject() =>
+            host.dispatcher.InvokeAsync(async () =>
+            {
+                var debugging = TryGetDebugging();
+                if (debugging is null) { host.Log("RunProject: GameStudioViewModel not found"); return -1; }
+                host.Log("RunProject: invoking RunProjectAsync");
+                var (ok, proc) = await debugging.RunProjectAsync().ConfigureAwait(true);
+                if (!ok || proc is null) { host.Log("RunProject: failed"); return -1; }
+                host.Log($"RunProject: launched pid={proc.Id}");
+                return proc.Id;
+            }).Task.Unwrap();
+
+        public async Task<IntPtr> WaitForGameWindow(int pid, double timeoutSeconds = 60)
+        {
+            host.Log($"WaitForGameWindow: pid={pid} timeout={timeoutSeconds}s");
+            Process proc;
+            try { proc = Process.GetProcessById(pid); }
+            catch (ArgumentException) { host.Log($"WaitForGameWindow: pid {pid} not found"); return IntPtr.Zero; }
+
+            var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (proc.HasExited) { host.Log($"WaitForGameWindow: pid {pid} exited"); return IntPtr.Zero; }
+                proc.Refresh();
+                var hwnd = proc.MainWindowHandle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    try { proc.WaitForInputIdle(2000); } catch { /* not a GUI app, or already idle */ }
+                    host.Log($"WaitForGameWindow: hwnd=0x{hwnd.ToInt64():X}");
+                    return hwnd;
+                }
+                await Task.Delay(200).ConfigureAwait(false);
+            }
+            host.Log($"WaitForGameWindow: timed out after {timeoutSeconds}s");
+            return IntPtr.Zero;
+        }
+
+        public async Task WaitForGameFrames(IntPtr hwnd, int minFrames = 100, double postFirstFrameDelaySeconds = 2.0, double timeoutSeconds = 90)
+        {
+            host.Log($"WaitForGameFrames: hwnd=0x{hwnd.ToInt64():X} minFrames={minFrames} postFirstFrame={postFirstFrameDelaySeconds}s timeout={timeoutSeconds}s");
+            await GraphicsCaptureClient.WaitForFramesAsync(hwnd, minFrames, postFirstFrameDelaySeconds, timeoutSeconds).ConfigureAwait(false);
+        }
+
+        public async Task ScreenshotHwnd(IntPtr hwnd, string name)
+        {
+            if (hwnd == IntPtr.Zero) { host.Log($"ScreenshotHwnd('{name}'): hwnd is zero"); return; }
+            var path = Path.Combine(host.outputDir, ScreenshotsDir, name + ".png");
+            try
+            {
+                await GraphicsCaptureClient.CaptureToPngAsync(hwnd, path).ConfigureAwait(false);
+                host.capturedNames.Add(name);
+                host.Log($"ScreenshotHwnd: wrote → {path}");
+            }
+            catch (Exception ex) { host.Log($"ScreenshotHwnd('{name}') failed: {ex}"); }
+        }
+
+        public async Task CloseGameWindow(int pid, double timeoutSeconds = 30)
+        {
+            host.Log($"CloseGameWindow: pid={pid} timeout={timeoutSeconds}s");
+            Process proc;
+            try { proc = Process.GetProcessById(pid); }
+            catch (ArgumentException) { host.Log($"CloseGameWindow: pid {pid} not found"); return; }
+            if (proc.HasExited) { host.Log($"CloseGameWindow: pid {pid} already exited"); return; }
+            proc.Refresh();
+            var hwnd = proc.MainWindowHandle;
+            if (hwnd != IntPtr.Zero) PostMessage(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            else host.Log("CloseGameWindow: no MainWindowHandle, will rely on Kill");
+            if (!await Task.Run(() => proc.WaitForExit((int)(timeoutSeconds * 1000))).ConfigureAwait(false))
+            {
+                host.Log("CloseGameWindow: WM_CLOSE timed out, killing");
+                try { proc.Kill(entireProcessTree: true); } catch (Exception ex) { host.Log($"Kill failed: {ex.Message}"); }
+            }
+            // Process.ExitCode requires a handle the runtime retained from Start; pids opened via
+            // GetProcessById don't qualify. Just log exit.
+            host.Log($"CloseGameWindow: pid={pid} exited");
+        }
+
+        private const int WM_CLOSE = 0x0010;
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        [return: MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool PostMessage(IntPtr hWnd, int Msg, IntPtr wParam, IntPtr lParam);
+
+        private static DebuggingViewModel TryGetDebugging()
+        {
+            var app = Application.Current;
+            if (app is null) return null;
+            foreach (var w in app.Windows.OfType<Window>())
+            {
+                if (w.DataContext is GameStudioViewModel gs) return gs.Debugging;
+            }
+            return null;
+        }
+
+        public Task<Guid> AddAssetFromTemplate(Guid templateId, string templateName = null) =>
+            host.dispatcher.InvokeAsync(async () =>
+            {
+                var session = TryGetSession();
+                if (session is null) { host.Log("AddAssetFromTemplate: no session"); return Guid.Empty; }
+                // Procedural-model variants all share the generator's TemplateId; Name disambiguates.
+                var matches = session.FindTemplates(TemplateScope.Asset).Where(t => t.Id == templateId).ToList();
+                var template = templateName is null
+                    ? matches.FirstOrDefault()
+                    : matches.FirstOrDefault(t => string.Equals(t.Name, templateName, StringComparison.Ordinal));
+                if (template is null)
+                {
+                    host.Log($"AddAssetFromTemplate: template id={templateId} name='{templateName ?? "*"}' not found ({matches.Count} sharing Id: {string.Join(",", matches.Select(t => t.Name))})");
+                    return Guid.Empty;
+                }
+                var assetView = session.ActiveAssetView;
+                if (assetView is null) { host.Log("AddAssetFromTemplate: ActiveAssetView is null"); return Guid.Empty; }
+                var templateVm = new TemplateDescriptionViewModel(session.ServiceProvider, template);
+                var created = await assetView.RunAssetTemplate(templateVm, null).ConfigureAwait(true);
+                if (created is null || created.Count == 0) { host.Log("AddAssetFromTemplate: RunAssetTemplate returned no asset"); return Guid.Empty; }
+                host.Log($"AddAssetFromTemplate: created '{created[0].Url}' (id={created[0].Id})");
+                return (Guid)created[0].Id;
+            }).Task.Unwrap();
+
+        public async Task QueueAssetPickerResponse(string assetName, double timeoutSeconds = 30)
+        {
+            host.Log($"QueueAssetPickerResponse: assetName='{assetName ?? "<cancel>"}' timeout={timeoutSeconds}s");
+            var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            // Poll for the AssetPickerWindow to appear, then resolve it on the dispatcher.
+            while (DateTime.UtcNow < deadline)
+            {
+                var resolved = await host.dispatcher.InvokeAsync(() => TryResolveAssetPicker(assetName)).Task.ConfigureAwait(false);
+                if (resolved) return;
+                await Task.Delay(150).ConfigureAwait(false);
+            }
+            host.Log($"QueueAssetPickerResponse: timed out — no AssetPickerWindow appeared within {timeoutSeconds}s");
+        }
+
+        private bool TryResolveAssetPicker(string assetName)
+        {
+            var picker = Application.Current?.Windows.OfType<AssetPickerWindow>().FirstOrDefault(w => w.IsLoaded && w.IsVisible);
+            if (picker is null) return false;
+            if (assetName is null)
+            {
+                picker.RequestClose(DialogResult.Cancel);
+                host.Log("QueueAssetPickerResponse: cancelled picker");
+                return true;
+            }
+            var asset = picker.Session.AllAssets.FirstOrDefault(a => string.Equals(a.Name, assetName, StringComparison.Ordinal));
+            if (asset is null)
+            {
+                host.Log($"QueueAssetPickerResponse: asset '{assetName}' not found; cancelling");
+                picker.RequestClose(DialogResult.Cancel);
+                return true;
+            }
+            picker.AssetView.SelectAssets(new[] { asset });
+            picker.RequestClose(DialogResult.Ok);
+            host.Log($"QueueAssetPickerResponse: selected '{asset.Url}' (id={asset.Id}) and confirmed");
+            return true;
+        }
+
+        public Task<bool> AddEntityToScene(string entityName, Guid modelAssetId, Vector3 position) =>
+            host.dispatcher.InvokeAsync(() =>
+            {
+                var session = TryGetSession();
+                if (session is null) { host.Log("AddEntityToScene: no session"); return false; }
+                var modelAsset = session.AllAssets.FirstOrDefault(a => (Guid)a.Id == modelAssetId);
+                if (modelAsset is null) { host.Log($"AddEntityToScene: model asset id={modelAssetId} not found"); return false; }
+                var sceneEditor = TryGetOpenSceneEditor();
+                if (sceneEditor is null) { host.Log("AddEntityToScene: no SceneEditorViewModel open"); return false; }
+                var factory = new ModelEntityFactory(entityName, modelAsset.Id, modelAsset.Url, position);
+                sceneEditor.CreateEntityInRootCommand.Execute(factory);
+                host.Log($"AddEntityToScene: '{entityName}' factory dispatched (modelAsset='{modelAsset.Url}', position={position})");
+                return true;
+            }).Task;
+
+        private static SceneEditorViewModel TryGetOpenSceneEditor()
+        {
+            var session = TryGetSession();
+            if (session?.ServiceProvider.TryGet<IAssetEditorsManager>() is not AssetEditorsManager aem) return null;
+            return aem.EditorViewModels.OfType<SceneEditorViewModel>().FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Entity with <c>ModelComponent</c> + transform pre-set. <c>CreateEntityInRootCommand</c>
+        /// preserves the factory-set position (its mouse-position branch is skipped).
+        /// </summary>
+        private sealed class ModelEntityFactory : IEntityFactory
+        {
+            private readonly string entityName;
+            private readonly Stride.Core.Assets.AssetId modelId;
+            private readonly string modelUrl;
+            private readonly Vector3 position;
+
+            public ModelEntityFactory(string entityName, Stride.Core.Assets.AssetId modelId, string modelUrl, Vector3 position)
+            {
+                this.entityName = entityName;
+                this.modelId = modelId;
+                this.modelUrl = modelUrl;
+                this.position = position;
+            }
+
+            public Task<Entity> CreateEntity(EntityHierarchyItemViewModel parent)
+            {
+                var entity = new Entity(entityName);
+                entity.Transform.Position = position;
+                var modelRef = AttachedReferenceManager.CreateProxyObject<Model>(modelId, modelUrl);
+                entity.Add(new ModelComponent { Model = modelRef });
+                return Task.FromResult(entity);
+            }
         }
 
         public void Exit(int newExitCode = 0)

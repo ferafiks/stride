@@ -62,16 +62,66 @@ public interface IUITestContext
     Task<bool> WaitForWindow(string windowTypeName, double timeoutSeconds = 120);
 
     /// <summary>
-    /// Selects a template in the ProjectSelectionWindow by template GUID and returns true if found.
+    /// Selects a template in the ProjectSelectionWindow by template id and returns true if found.
     /// The dialog stays open; close it via <see cref="CloseModalWithOk"/>.
     /// </summary>
-    Task<bool> SelectTemplate(string templateGuid);
+    Task<bool> SelectTemplate(Guid templateId);
 
     /// <summary>
     /// Closes a modal dialog with <c>DialogResult.Ok</c> (equivalent to clicking OK / Create).
     /// Returns true if the window was found and closed.
     /// </summary>
     Task<bool> CloseModalWithOk(string windowTypeName);
+
+    /// <summary>
+    /// Equivalent of pressing F5 in GameStudio: builds the current project and launches the resulting
+    /// .exe. Returns the launched process id (or -1 on failure).
+    /// </summary>
+    Task<int> RunProject();
+
+    /// <summary>
+    /// Polls the process by id until its <see cref="System.Diagnostics.Process.MainWindowHandle"/> is
+    /// non-zero, then calls <c>Process.WaitForInputIdle</c>. Returns the HWND or <c>IntPtr.Zero</c> on
+    /// timeout / process exit.
+    /// </summary>
+    Task<IntPtr> WaitForGameWindow(int pid, double timeoutSeconds = 60);
+
+    /// <summary>
+    /// Returns when WGC has delivered <paramref name="minFrames"/> frames AND
+    /// <paramref name="postFirstFrameDelaySeconds"/> have elapsed since the first one (lets TAA-style
+    /// post-effects converge). Default timeout absorbs cold shader-cache builds.
+    /// </summary>
+    Task WaitForGameFrames(IntPtr hwnd, int minFrames = 100, double postFirstFrameDelaySeconds = 2.0, double timeoutSeconds = 90);
+
+    /// <summary>Captures a specific HWND (e.g. a game window from a child process) to a PNG.</summary>
+    Task ScreenshotHwnd(IntPtr hwnd, string name);
+
+    /// <summary>
+    /// Sends <c>WM_CLOSE</c> to the game window and waits for the process to exit. Force-kills if
+    /// the process doesn't exit within the timeout.
+    /// </summary>
+    Task CloseGameWindow(int pid, double timeoutSeconds = 30);
+
+    /// <summary>
+    /// Invokes the same <c>RunAssetTemplate</c> path the asset-templates dialog uses on OK. Pass
+    /// <paramref name="templateName"/> to disambiguate when several templates share an Id (e.g.
+    /// procedural-model variants). Returns the created asset's id, or <see cref="Guid.Empty"/> on
+    /// failure.
+    /// </summary>
+    Task<Guid> AddAssetFromTemplate(Guid templateId, string templateName = null);
+
+    /// <summary>
+    /// Registers a one-shot handler for the next <c>AssetPickerWindow</c>: selects the asset by
+    /// <c>Name</c> and confirms. Pass <c>null</c> to cancel the picker.
+    /// </summary>
+    Task QueueAssetPickerResponse(string assetName, double timeoutSeconds = 30);
+
+    /// <summary>
+    /// Adds an entity to the open scene with a <c>ModelComponent</c> referencing
+    /// <paramref name="modelAssetId"/>, at <paramref name="position"/>. Goes through
+    /// <c>CreateEntityInRootCommand</c> with a custom <c>IEntityFactory</c>.
+    /// </summary>
+    Task<bool> AddEntityToScene(string entityName, Guid modelAssetId, Stride.Core.Mathematics.Vector3 position);
 
     /// <summary>Sets the process exit code and shuts the editor down.</summary>
     void Exit(int exitCode = 0);
