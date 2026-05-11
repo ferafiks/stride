@@ -77,10 +77,12 @@ jobs:
               - 'deps/**'
               - 'build/Stride.sln'
 
+  # Draft PRs skip all automatic CI to save runner minutes; use the /ci chatops command
+  # to opt into specific suites while iterating. ready_for_review re-runs everything.
   ### Misc ###
   Assembly-Processor:
     needs: changes
-    if: needs.changes.outputs.runtime == 'true' || needs.changes.outputs.full == 'true'
+    if: github.event.pull_request.draft != true && (needs.changes.outputs.runtime == 'true' || needs.changes.outputs.full == 'true')
     uses: ./.github/workflows/build-assembly-processor.yml
     secrets: inherit
     with:
@@ -88,7 +90,7 @@ jobs:
 
   VS-Package:
     needs: changes
-    if: needs.changes.outputs.full == 'true'
+    if: github.event.pull_request.draft != true && needs.changes.outputs.full == 'true'
     uses: ./.github/workflows/build-vs-package.yml
     secrets: inherit
     with:
@@ -97,7 +99,7 @@ jobs:
   ### Runtimes ###
   iOS-Runtime:
     needs: changes
-    if: needs.changes.outputs.ios == 'true'
+    if: github.event.pull_request.draft != true && needs.changes.outputs.ios == 'true'
     uses: ./.github/workflows/build-ios.yml
     secrets: inherit
     with:
@@ -105,7 +107,7 @@ jobs:
 
   Linux-Runtime:
     needs: changes
-    if: needs.changes.outputs.runtime == 'true'
+    if: github.event.pull_request.draft != true && needs.changes.outputs.runtime == 'true'
     uses: ./.github/workflows/build-linux-runtime.yml
     secrets: inherit
     with:
@@ -113,7 +115,7 @@ jobs:
 
   Windows-Runtime-D3D11:
     needs: changes
-    if: needs.changes.outputs.runtime == 'true'
+    if: github.event.pull_request.draft != true && needs.changes.outputs.runtime == 'true'
     uses: ./.github/workflows/build-windows-runtime.yml
     secrets: inherit
     with:
@@ -122,7 +124,7 @@ jobs:
 
   Windows-Runtime-D3D12:
     needs: changes
-    if: needs.changes.outputs.runtime == 'true'
+    if: github.event.pull_request.draft != true && needs.changes.outputs.runtime == 'true'
     uses: ./.github/workflows/build-windows-runtime.yml
     secrets: inherit
     with:
@@ -131,7 +133,7 @@ jobs:
 
   Windows-Runtime-Vulkan:
     needs: changes
-    if: needs.changes.outputs.runtime == 'true'
+    if: github.event.pull_request.draft != true && needs.changes.outputs.runtime == 'true'
     uses: ./.github/workflows/build-windows-runtime.yml
     secrets: inherit
     with:

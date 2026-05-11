@@ -4,13 +4,14 @@ name: PR test chatops (results)
 #   1. Flip the `chatops/<suite>` check run on the PR head SHA (from in_progress → completed)
 #      as each individual run completes. SHA is read from a hidden marker in the dispatcher body.
 #   2. Once ALL runs referenced by a single dispatcher comment are done, post one summary comment
-#      pinging the original /test author. Idempotent via a marker appended to the dispatcher body.
+#      pinging the original /ci author. Idempotent via a marker appended to the dispatcher body.
 #
 # Deployment: see pr-test-chatops.yml header — uses the same App ID variable + private-key secret.
 
 on:
   workflow_run:
     workflows:
+      # Tests
       - "Test GameStudio (Screenshots)"
       - "Test Samples (Screenshots)"
       - "Test Windows (Game)"
@@ -18,6 +19,13 @@ on:
       - "Test Windows (Simple)"
       - "Test Linux Game (Vulkan)"
       - "Test Linux (Simple)"
+      # Builds
+      - "Build Assembly Processor"
+      - "Build Visual Studio Package"
+      - "Build iOS Runtime"
+      - "Build Linux Runtime"
+      - "Build Windows Runtime"
+      - "Build Windows (Full)"
     types: [completed]
 
 jobs:
@@ -53,7 +61,7 @@ jobs:
 
               const dispatcher = comments.find(c =>
                 c.user && c.user.type === 'Bot' &&
-                /\/test` dispatched:/.test(c.body || '') &&
+                /\/ci` dispatched:/.test(c.body || '') &&
                 (c.body || '').includes(runUrl)
               );
               if (!dispatcher) continue;
@@ -84,7 +92,7 @@ jobs:
 
               // Flip the per-suite check run for the run that just completed (regardless of
               // whether the others are done yet). SHA is captured from the dispatcher body so
-              // checks land on the commit /test was issued against, even if the PR head moved.
+              // checks land on the commit /ci was issued against, even if the PR head moved.
               const shaMatch = (dispatcher.body || '').match(/<!-- chatops-pr-head-sha:([a-f0-9]+) -->/);
               const prHeadSha = shaMatch ? shaMatch[1] : null;
               const completedRunId = context.payload.workflow_run.id;
@@ -138,7 +146,7 @@ jobs:
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
                 issue_number: pr.number,
-                body: `${userMention}\`/test\` complete (${summary}):\n${lines.join('\n')}`,
+                body: `${userMention}\`/ci\` complete (${summary}):\n${lines.join('\n')}`,
               });
 
               await github.rest.issues.updateComment({

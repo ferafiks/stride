@@ -26,9 +26,12 @@ on:
       graphics-api:
         default: Direct3D11
         type: string
+  repository_dispatch:
+    # Fired by chatops bot. Payload: { pr_number, graphics-api, dispatched_by }.
+    types: [build-windows-runtime]
 
 concurrency:
-  group: build-windows-runtime-${{ github.event.pull_request.number || github.ref }}-${{ github.event.inputs.build-type || inputs.build-type || 'Debug' }}-${{ github.event.inputs.graphics-api || inputs.graphics-api || 'Direct3D11' }}
+  group: build-windows-runtime-${{ github.event.pull_request.number || github.event.client_payload.pr_number || github.ref }}-${{ github.event.inputs.build-type || inputs.build-type || 'Debug' }}-${{ github.event.client_payload['graphics-api'] || github.event.inputs.graphics-api || inputs.graphics-api || 'Direct3D11' }}
   cancel-in-progress: true
 
 jobs:
@@ -36,13 +39,14 @@ jobs:
   # Build Stride Runtime for Windows
   #
   Windows-Runtime:
-    name: Build (${{ github.event.inputs.build-type || inputs.build-type || 'Debug' }}, ${{ github.event.inputs.graphics-api || inputs.graphics-api || 'Direct3D11' }})
+    name: Build (${{ github.event.inputs.build-type || inputs.build-type || 'Debug' }}, ${{ github.event.client_payload['graphics-api'] || github.event.inputs.graphics-api || inputs.graphics-api || 'Direct3D11' }})
     runs-on: windows-2025-vs2026
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: true
           submodules: true
+          ref: ${{ github.event.client_payload.pr_number && format('refs/pull/{0}/merge', github.event.client_payload.pr_number) || github.ref }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -53,6 +57,6 @@ jobs:
             -v:m -p:WarningLevel=0 `
             -p:Configuration=${{ github.event.inputs.build-type || inputs.build-type || 'Debug' }} `
             -p:StridePlatforms=Windows `
-            -p:StrideGraphicsApis=${{ github.event.inputs.graphics-api || inputs.graphics-api || 'Direct3D11' }} `
+            -p:StrideGraphicsApis=${{ github.event.client_payload['graphics-api'] || github.event.inputs.graphics-api || inputs.graphics-api || 'Direct3D11' }} `
             -p:StrideSkipUnitTests=true `
             -p:StrideSkipAutoPack=true
