@@ -62,6 +62,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+          submodules: true
           # Chatops dispatch passes a PR number; check out its merge ref so we test the
           # post-merge state (works uniformly for same-repo and fork PRs).
           ref: ${{ github.event.client_payload.pr_number && format('refs/pull/{0}/merge', github.event.client_payload.pr_number) || github.ref }}

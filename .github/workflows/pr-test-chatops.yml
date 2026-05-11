@@ -158,6 +158,31 @@ jobs:
               comment_id: context.payload.comment.id, content: 'rocket',
             });
 
+            // Surface workflow-YAML drift between PR and master. Dispatched runs load
+            // their YAML from master (the repository_dispatch trigger ignores PR refs),
+            // so PR-side workflow edits don't take effect until merged. Without this
+            // warning, /test silently runs an older version of the workflow and the
+            // collaborator chases a ghost failure (e.g. PR adds `submodules: true`,
+            // /test still runs without it).
+            const crypto = require('crypto');
+            const driftWarnings = [];
+            const checkedPaths = new Set();
+            for (const suite of requested) {
+              const wfPath = `.github/workflows/${SUITES[suite].workflow}`;
+              if (checkedPaths.has(wfPath)) continue;
+              checkedPaths.add(wfPath);
+              try {
+                const [m, p] = await Promise.all([
+                  github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path: wfPath, ref: 'master' }),
+                  github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path: wfPath, ref: `refs/pull/${pr.number}/merge` }),
+                ]);
+                if (m.data.sha !== p.data.sha) {
+                  const anchor = crypto.createHash('sha256').update(wfPath).digest('hex');
+                  driftWarnings.push(`  - [\`${wfPath}\`](https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${pr.number}/files#diff-${anchor})`);
+                }
+              } catch (_) { /* missing on either side — skip */ }
+            }
+
             const lines = [];
             for (const suite of requested) {
               const cfg = SUITES[suite];
@@ -213,4 +238,7 @@ jobs:
             // "all runs done"), and the hidden chatops-pr-head-sha marker (so status checks land
             // on the right SHA even if the user pushes more commits). Don't drop the comment just
             // because the 🚀 reaction + commit statuses already convey "/test was accepted".
-            await post(`@${author} — \`/test\` dispatched:\n${lines.join('\n')}\n\n<!-- chatops-pr-head-sha:${pr.head.sha} -->`);
+            const driftBlock = driftWarnings.length
+              ? `\n\n⚠️ This PR modifies workflow YAML used by \`/test\`, but the bot runs **master's** version:\n${driftWarnings.join('\n')}\n\nLand workflow changes on master first if you need them tested.`
+              : '';
+            await post(`@${author} — \`/test\` dispatched:\n${lines.join('\n')}${driftBlock}\n\n<!-- chatops-pr-head-sha:${pr.head.sha} -->`);
