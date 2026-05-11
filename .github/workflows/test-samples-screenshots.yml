@@ -10,16 +10,38 @@ on:
         options:
           - Debug
           - Release
+  repository_dispatch:
+    types: [test-samples-screenshots]
   schedule:
-    # Daily at 04:00 UTC.
-    - cron: '0 4 * * *'
+    # Daily at 04:37 UTC — offset off top-of-hour to avoid GitHub Actions cron load spikes.
+    - cron: '37 4 * * *'
 
 concurrency:
-  group: test-samples-screenshots-${{ github.ref }}
+  group: test-samples-screenshots-${{ github.event.client_payload.pr_number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # LPIPS comparator falls back to Claude vision for borderline drift; without ANTHROPIC_API_KEY
+  # (typical on forks) flaky frames would surface as false drift. Skip cleanly when missing.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has-api-key: ${{ steps.check.outputs.has-api-key }}
+    steps:
+      - id: check
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "has-api-key=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-api-key=false" >> $GITHUB_OUTPUT
+            echo "::notice::ANTHROPIC_API_KEY not set; skipping samples screenshot suite. Set it under repo Settings → Secrets → Actions to enable."
+          fi
+
   Run:
+    needs: preflight
+    if: needs.preflight.outputs.has-api-key == 'true'
     name: Capture & compare all samples (${{ matrix.graphics-api }}, ${{ github.event.inputs.build-type || 'Debug' }})
     # Single job per graphics API: the harness + orchestrator + comparator are sample-agnostic, so a
     # matrix-per-sample would build the engine 15× for the same artifacts. Sequential capture
@@ -42,6 +64,7 @@ jobs:
         with:
           lfs: true
           submodules: true
+          ref: ${{ github.event.client_payload.pr_number && format('refs/pull/{0}/merge', github.event.client_payload.pr_number) || github.ref }}
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -85,7 +108,6 @@ jobs:
       - name: Build harness assembly (packs Stride.Games.AutoTesting into bin/packages)
         run: |
           dotnet build sources\engine\Stride.Games.AutoTesting\Stride.Games.AutoTesting.csproj `
-            -p:StrideNativeBuildMode=Clang `
             -nr:false -v:m -p:WarningLevel=0 `
             -p:Configuration=${{ github.event.inputs.build-type || 'Debug' }} `
             -p:StrideGraphicsApi=${{ matrix.graphics-api }} `
@@ -116,7 +138,6 @@ jobs:
       - name: Build test project
         run: |
           dotnet build samples\Tests\Stride.Samples.Tests.csproj `
-            -p:StrideNativeBuildMode=Clang `
             -nr:false -v:m -p:WarningLevel=0 `
             -p:Configuration=${{ github.event.inputs.build-type || 'Debug' }} `
             -p:StrideGraphicsApi=${{ matrix.graphics-api }} `

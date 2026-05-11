@@ -22,7 +22,7 @@
     Rule: User properties from .csproj ARE visible here.
           This is where conditional logic belongs.
 
-    See: build/docs/SDK-GUIDE.md#property-evaluation-order
+    See: docs/build/SDK-GUIDE.md#property-evaluation-order
     ================================================================
   -->
 
@@ -144,7 +144,7 @@
   <!-- StrideCompilerTargetsEnable - Conditional Build Skip -->
   <!-- ================================================================ -->
   <PropertyGroup>
-    <StrideCompilerTargetsEnable Condition="'$(TargetFramework)' != '$(StrideFramework)' And '$(TargetFramework)' == '$(StrideFrameworkWindows)' And '$(StrideWindowsOnly)' == 'true'">false</StrideCompilerTargetsEnable>
+    <StrideCompilerTargetsEnable Condition="'$(StrideTargetFramework)' != '$(StrideFramework)' And '$(StrideTargetFramework)' == '$(StrideFrameworkWindows)' And '$(StrideWindowsOnly)' == 'true'">false</StrideCompilerTargetsEnable>
     <!-- Skip unit tests if requested -->
     <StrideCompilerTargetsEnable Condition="'$(StrideSkipUnitTests)' == 'true' And $(StrideOutputFolder.StartsWith('Tests'))">false</StrideCompilerTargetsEnable>
     <!-- If StrideCompilerTargetsEnable is set to false, override LanguageTargets to an empty one -->

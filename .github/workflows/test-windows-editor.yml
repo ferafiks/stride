@@ -1,0 +1,148 @@
+name: Test GameStudio (Screenshots)
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-type:
+        description: Build
+        default: Debug
+        type: choice
+        options:
+          - Debug
+          - Release
+  repository_dispatch:
+    # Fired by chatops bot. Payload: { pr_number, dispatched_by }.
+    types: [test-editor-screenshots]
+  schedule:
+    # Daily at 05:17 UTC — offset off top-of-hour to avoid GitHub Actions cron load spikes;
+    # gap from test-samples-screenshots (04:37) so they don't compete for runners.
+    - cron: '17 5 * * *'
+
+concurrency:
+  group: test-windows-editor-${{ github.event.client_payload.pr_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Editor drift is non-deterministic enough that the LPIPS comparator relies on Claude vision
+  # as a fallback for borderline cases. Without ANTHROPIC_API_KEY (typical on forks), most flaky
+  # runs would report drift. Skip the suite cleanly so forks don't see misleading failures.
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      has-api-key: ${{ steps.check.outputs.has-api-key }}
+    steps:
+      - id: check
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "has-api-key=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-api-key=false" >> $GITHUB_OUTPUT
+            echo "::notice::ANTHROPIC_API_KEY not set; skipping editor screenshot suite. Set it under repo Settings → Secrets → Actions to enable."
+          fi
+
+  Run:
+    needs: preflight
+    if: needs.preflight.outputs.has-api-key == 'true'
+    name: Editor screenshots (${{ github.event.inputs.build-type || 'Debug' }})
+    runs-on: windows-2025-vs2026
+    env:
+      DOTNET_DbgEnableMiniDump: "1"
+      DOTNET_DbgMiniDumpType: "1"
+      DOTNET_DbgMiniDumpName: "${{ github.workspace }}\\crash-dumps\\dotnet_%p.dmp"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          ref: ${{ github.event.client_payload.pr_number && format('refs/pull/{0}/merge', github.event.client_payload.pr_number) || github.ref }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Configure crash dumps
+        shell: pwsh
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting" /v DontShowUI /t REG_DWORD /d 1 /f
+          $dumpDir = "${{ github.workspace }}\crash-dumps"
+          New-Item -Path $dumpDir -ItemType Directory -Force | Out-Null
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps" /v DumpFolder /t REG_EXPAND_SZ /d $dumpDir /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps" /v DumpType /t REG_DWORD /d 1 /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps" /v DumpCount /t REG_DWORD /d 10 /f
+
+      # nuget.config's `stride-local` source points at bin/packages, which doesn't exist on a
+      # fresh checkout (auto-pack-deploy populates it on first build); pre-create it empty.
+      - name: Pre-create bin/packages so restore doesn't fail on missing local source
+        shell: pwsh
+        run: New-Item -ItemType Directory -Path bin/packages -Force | Out-Null
+
+      # PackageStore.LoadDefaultSettings(null) only reads the user + machine NuGet configs,
+      # not the workspace nuget.config — register bin/packages in the user config.
+      - name: Register bin/packages with user NuGet config
+        shell: pwsh
+        run: |
+          New-Item -Path "$env:APPDATA\NuGet" -ItemType Directory -Force | Out-Null
+          dotnet nuget add source "${{ github.workspace }}\bin\packages" --name stride-local --configfile "$env:APPDATA\NuGet\NuGet.Config"
+
+      # GH runners default to a 0x0 fallback display; WPF clamps the editor to that. The
+      # composite action installs an IDD virtual display so we get a real desktop surface.
+      - name: Set display resolution
+        uses: ./.github/actions/set-display-resolution-vdd
+        with:
+          width: '3840'
+          height: '2160'
+
+      - name: Build Stride.GameStudio.AutoTesting
+        run: |
+          dotnet build sources\editor\Stride.GameStudio.AutoTesting\Stride.GameStudio.AutoTesting.csproj `
+            -nr:false -v:m -p:WarningLevel=0 `
+            -p:Configuration=${{ github.event.inputs.build-type || 'Debug' }}
+
+      - name: Build Stride.Editor.Tests
+        run: |
+          dotnet build tests\editor\Stride.Editor.Tests.csproj `
+            -nr:false -v:m -p:WarningLevel=0 `
+            -p:Configuration=${{ github.event.inputs.build-type || 'Debug' }}
+
+      # EditorScreenshotTests.Capture is an xunit [Theory] over Fixtures(); each entry spawns
+      # the AutoTesting CLI as a subprocess (per-fixture WPF singleton-state isolation),
+      # snapshots the runner output into <worktree>/ui-test-out-dpi<N>/<fixture>/, then runs
+      # ScreenshotComparator.Compare against tests/editor/baselines/dpi<N>/. ANTHROPIC_API_KEY
+      # opts the comparator into Claude vision second-opinions on frames that exceed LPIPS —
+      # cost is bounded because Claude only fires on already-failing frames.
+      - name: Run editor screenshot tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          dotnet test tests\editor\Stride.Editor.Tests.csproj `
+            --no-build `
+            --filter "FullyQualifiedName~Stride.Editor.Tests.EditorScreenshotTests" `
+            --logger "trx;LogFileName=editor-screenshots.trx" `
+            --results-directory TestResults `
+            -p:Configuration=${{ github.event.inputs.build-type || 'Debug' }}
+
+      - name: Publish test report
+        if: always()
+        uses: phoenix-actions/test-reporting@v15
+        with:
+          name: 'Editor screenshot regression'
+          path: TestResults/*.trx
+          reporter: dotnet-trx
+          output-to: step-summary
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-screenshots
+          path: ui-test-out-dpi*/
+          if-no-files-found: warn
+
+      - name: Upload crash dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-crash-dumps
+          path: crash-dumps/
+          if-no-files-found: ignore
