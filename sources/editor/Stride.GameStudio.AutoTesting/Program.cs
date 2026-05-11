@@ -36,6 +36,16 @@ internal static class Program
         }
         catch { /* best-effort — failure shows up as the privacy-policy hang */ }
 
+        // Clear the "last startup-session load crashed" sticky flag — a previous AutoTesting run
+        // that timed out / was killed leaves it on, which makes OpenInitialSession pop a "try
+        // again?" MessageBox with no one to click. Always reset before launching GS.
+        try
+        {
+            Stride.Core.Assets.Editor.Settings.InternalSettings.LoadingStartupSession.SetValue(false);
+            Stride.Core.Assets.Editor.Settings.InternalSettings.Save();
+        }
+        catch { /* best-effort — at worst we re-prompt on the next run */ }
+
         // Parse our own args. Anything we don't recognise is forwarded to Stride.GameStudio.Run.
         string? testDll = null;
         string? testName = null;
