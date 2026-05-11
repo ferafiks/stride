@@ -12,7 +12,7 @@ name: PR test chatops
 #   - Contents: read & write          (repository_dispatch)
 #   - Pull requests: read & write     (comments + reactions)
 #   - Actions: read                   (workflow-run lookups)
-#   - Commit statuses: read & write   (PR check rollup)
+#   - Checks: read & write            (PR check rollup with in_progress state)
 # Then in repo Settings → Secrets and variables → Actions:
 #   - Variable CHATOPS_APP_ID             (the App's numeric ID)
 #   - Secret   CHATOPS_APP_PRIVATE_KEY    (the App's .pem private key, full contents)
@@ -186,21 +186,22 @@ jobs:
                   ? `- \`${suite}\`: ${run.html_url}`
                   : `- \`${suite}\`: dispatched (run link will appear in Checks tab — couldn't capture within 20s)`);
 
-                // Pending commit status — listener flips to success/failure on completion. Only
-                // create it when we have a run URL to link to; otherwise the status would be
-                // stuck pending (the listener has no way to match it back).
+                // In-progress check run — listener flips to completed on workflow completion.
+                // Only create it when we have a run URL to link to; otherwise the check would
+                // be orphaned (the listener has no way to match it back).
                 if (run) {
                   try {
-                    await github.rest.repos.createCommitStatus({
+                    await github.rest.checks.create({
                       owner: context.repo.owner, repo: context.repo.repo,
-                      sha: pr.head.sha,
-                      state: 'pending',
-                      context: `chatops/${suite}`,
-                      description: 'Dispatched, awaiting completion',
-                      target_url: run.html_url,
+                      name: `chatops/${suite}`,
+                      head_sha: pr.head.sha,
+                      status: 'in_progress',
+                      started_at: dispatchAt.toISOString(),
+                      details_url: run.html_url,
+                      output: { title: 'Dispatched', summary: `Run: ${run.html_url}` },
                     });
                   } catch (e) {
-                    core.warning(`Failed to set pending status for ${suite}: ${e.message}`);
+                    core.warning(`Failed to create check run for ${suite}: ${e.message}`);
                   }
                 }
               } catch (e) {
