@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="K4os.Compression.LZ4.Legacy" />
+    <PackageReference Include="K4os.Compression.LZ4.Legacy" PrivateAssets="compile" />
   </ItemGroup>
 
   <ItemGroup>

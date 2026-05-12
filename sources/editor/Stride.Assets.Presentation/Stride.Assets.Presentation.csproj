@@ -23,6 +23,7 @@
     <PackageReference Include="RoslynPad.Editor.Windows" />
     <PackageReference Include="RoslynPad.Roslyn.Windows" />
     <PackageReference Include="RoslynPad.Roslyn" />
+    <PackageReference Include="DotRecast.Detour" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\..\shared\SharedAssemblyInfo.cs">

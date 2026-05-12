@@ -23,16 +23,16 @@
     <ProjectReference Include="..\Stride.Shaders.Parsers\Stride.Shaders.Parsers.csproj" />
     <ProjectReference Include="..\Stride.Shaders\Stride.Shaders.csproj" />
     <ProjectReference Include="..\Stride.Shaders.Generators\Stride.Shaders.Generators.csproj" ReferenceOutputAssembly="false" />
-    <PackageReference Include="CommunityToolkit.HighPerformance" />
+    <PackageReference Include="CommunityToolkit.HighPerformance" PrivateAssets="compile" />
     <!-- SPIRV-Cross: we use the managed bindings from Silk.NET but replace the native
          library with our own build (stride3d/SPIRV-Cross) which includes tessellation
          and other fixes not yet upstream. See dep-spirv-cross.yml workflow. -->
-    <PackageReference Include="Silk.NET.SPIRV.Cross" />
+    <PackageReference Include="Silk.NET.SPIRV.Cross" PrivateAssets="compile" />
     <PackageReference Include="Silk.NET.SPIRV.Cross.Native" ExcludeAssets="all" PrivateAssets="all" />
-    <PackageReference Include="Stride.Dependencies.SpirvCross" />
-    <PackageReference Include="Silk.NET.Direct3D.Compilers" Condition="'$(TargetFramework)' == '$(StrideFramework)' Or '$(TargetFramework)' == '$(StrideFrameworkUWP)'" />
-    <PackageReference Include="Silk.NET.Direct3D11" Condition="'$(TargetFramework)' == '$(StrideFramework)' Or '$(TargetFramework)' == '$(StrideFrameworkUWP)'" />
-    <PackageReference Include="Silk.NET.Shaderc" />
+    <PackageReference Include="Stride.Dependencies.SpirvCross" PrivateAssets="compile" />
+    <PackageReference Include="Silk.NET.Direct3D.Compilers" Condition="'$(TargetFramework)' == '$(StrideFramework)' Or '$(TargetFramework)' == '$(StrideFrameworkUWP)'" PrivateAssets="compile" />
+    <PackageReference Include="Silk.NET.Direct3D11" Condition="'$(TargetFramework)' == '$(StrideFramework)' Or '$(TargetFramework)' == '$(StrideFrameworkUWP)'" PrivateAssets="compile" />
+    <PackageReference Include="Silk.NET.Shaderc" PrivateAssets="compile" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == '$(StrideFramework)'">
     <StrideNativeLib Include="$(WindowsSdkDir_10)\Redist\D3D\**\d3dcompiler_47.dll">
