@@ -4,13 +4,12 @@ using System.Text.Json;
 using AngleSharp;
 using AngleSharp.Common;
 using AngleSharp.Dom;
-using Microsoft.CodeAnalysis;
 
 namespace Stride.Shaders.Spirv.Generators;
 
 public partial class SPVGenerator
 {
-    static readonly string[] RequiredFiles =
+    internal static readonly string[] RequiredFiles =
     [
         "spirv.core.grammar.json",
         "spirv.sdsl.grammar-ext.json",
@@ -19,22 +18,21 @@ public partial class SPVGenerator
         "GLSL.std.450.html"
     ];
 
-    public static bool IsSpirvSpecification(AdditionalText file)
+    public static bool IsSpirvSpecification(SpvInputFile file)
         => Array.IndexOf(RequiredFiles, Path.GetFileName(file.Path)) >= 0;
 
-    public SpirvGrammar PreProcessGrammar(ImmutableArray<AdditionalText> files, CancellationToken _)
+    public SpirvGrammar PreProcessGrammar(ImmutableArray<SpvInputFile> files, CancellationToken _)
     {
-        // Note: Missing files are reported as SPV0001 via the RegisterSourceOutput check in Initialize
         SpirvGrammar grammar = new();
         foreach (var file in files)
         {
             if (Path.GetFileName(file.Path) == "SPIRV.html")
-                grammar.CoreDoc = file.GetText()?.ToString() ?? "";
+                grammar.CoreDoc = file.Text;
             else if (Path.GetFileName(file.Path) == "GLSL.std.450.html")
-                grammar.GLSLDoc = file.GetText()?.ToString() ?? "";
+                grammar.GLSLDoc = file.Text;
             else
             {
-                var parsed = JsonSerializer.Deserialize<SpirvGrammar>(file.GetText()?.ToString() ?? "{}", options);
+                var parsed = JsonSerializer.Deserialize<SpirvGrammar>(file.Text, options);
                 if (grammar.MagicNumber == "" && parsed.MagicNumber != "")
                 {
                     grammar.MagicNumber = parsed!.MagicNumber;

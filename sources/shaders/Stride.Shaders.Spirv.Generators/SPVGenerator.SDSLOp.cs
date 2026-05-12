@@ -1,5 +1,4 @@
-﻿using Microsoft.CodeAnalysis;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -9,35 +8,19 @@ using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Security.Claims;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using AngleSharp.Common;
-using Microsoft.CodeAnalysis.Text;
 using System.Dynamic;
 
 namespace Stride.Shaders.Spirv.Generators;
 
 public partial class SPVGenerator
 {
-    public void CreateSDSLOp(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<SpirvGrammar> grammarProvider)
+    public static void ExecuteSDSLOpCreation(ISpvOutput ctx, SpirvGrammar grammar)
     {
-
-        var instructionsProvider =
-            grammarProvider
-            .SelectMany(static (grammar, b) => grammar.Instructions?.AsList() ?? [])
-            .Where(static x => x.OpName is not null)
-            .Collect()
-            .Select(static (arr, _) => new EquatableList<InstructionData>([.. arr]));
-
-        context.RegisterSourceOutput(
-            instructionsProvider,
-            ExecuteSDSLOpCreation
-        );
-
-    }
-    public void ExecuteSDSLOpCreation(SourceProductionContext ctx, EquatableList<InstructionData> instructionArray)
-    {
-
+        var instructionArray = grammar.Instructions?.AsList()?.Where(x => x.OpName is not null).ToList() ?? [];
         var members = instructionArray.ToDictionary(x => x.OpName, y => y.OpCode)!;
         int lastnum = 0;
 
@@ -78,13 +61,10 @@ public partial class SPVGenerator
         code.AppendLine("}}");
 
         ctx.AddSource("SpecificationOp.gen.cs",
-            SourceText.From(
-                SyntaxFactory
-                .ParseCompilationUnit(code.ToString())
-                .NormalizeWhitespace()
-                .ToFullString(),
-                Encoding.UTF8
-         )
+            SyntaxFactory
+            .ParseCompilationUnit(code.ToString())
+            .NormalizeWhitespace()
+            .ToFullString()
         );
     }
 }

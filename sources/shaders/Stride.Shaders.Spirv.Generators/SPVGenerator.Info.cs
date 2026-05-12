@@ -1,6 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
-using System.Text;
-using Microsoft.CodeAnalysis.Text;
+﻿using System.Text;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using System;
 
@@ -8,26 +7,7 @@ namespace Stride.Shaders.Spirv.Generators;
 
 public partial class SPVGenerator
 {
-
-    public void CreateParameterizedFuncs(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<SpirvGrammar> grammarProvider)
-    {
-
-        context.RegisterSourceOutput(
-            grammarProvider,
-            GenerateParameterizedFunctions
-        );
-    }
-    public void CreateInfo(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<SpirvGrammar> grammarProvider)
-    {
-
-        GenerateKinds(context, grammarProvider);
-        context.RegisterSourceOutput(
-            grammarProvider,
-            GenerateInstructionInformation
-        );
-    }
-
-    public void GenerateParameterizedFunctions(SourceProductionContext context, SpirvGrammar grammar)
+    public static void GenerateParameterizedFunctions(ISpvOutput context, SpirvGrammar grammar)
     {
         if (grammar.OperandKinds?.AsDictionary() is Dictionary<string, OpKind> dict)
         {
@@ -69,18 +49,15 @@ public partial class SPVGenerator
             code.AppendLine("}");
             context.AddSource(
                 "ParameterizedFlags.gen.cs",
-                SourceText.From(
-                    SyntaxFactory
-                    .ParseCompilationUnit(code.ToString())
-                    .NormalizeWhitespace()
-                    .ToFullString(),
-                    Encoding.UTF8
-                )
+                SyntaxFactory
+                .ParseCompilationUnit(code.ToString())
+                .NormalizeWhitespace()
+                .ToFullString()
             );
         }
 
     }
-    static void GenerateInstructionInformation(SourceProductionContext spc, SpirvGrammar grammar)
+    public static void GenerateInstructionInformation(ISpvOutput spc, SpirvGrammar grammar)
     {
         var code = new StringBuilder();
         code
@@ -101,90 +78,61 @@ public partial class SPVGenerator
         code.AppendLine("Instance.InitOrder();}}");
         spc.AddSource(
             "InstructionInfo.gen.cs",
-            SourceText.From(
-                SyntaxFactory
-                .ParseCompilationUnit(code.ToString())
-                .NormalizeWhitespace()
-                .ToFullString(),
-                Encoding.UTF8
-            )
+            SyntaxFactory
+            .ParseCompilationUnit(code.ToString())
+            .NormalizeWhitespace()
+            .ToFullString()
         );
     }
 
-    private void GenerateKinds(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<SpirvGrammar> grammarProvider)
+    public static void GenerateKinds(ISpvOutput spc, SpirvGrammar grammar)
     {
-        var kindsProvider = grammarProvider
-            .Select(static (grammar, _) => grammar.OperandKinds!.Value);
+        var kinds = grammar.OperandKinds!.Value;
+        var builder = new StringBuilder();
+        if (kinds.AsDictionary() is Dictionary<string, OpKind> dict)
+        {
+            builder
+                .AppendLine("using static Stride.Shaders.Spirv.Specification;")
+                .AppendLine("")
+                .AppendLine("namespace Stride.Shaders.Spirv.Core;")
+                .AppendLine("")
+                .AppendLine("public enum OperandKind")
+                .AppendLine("{")
+                .AppendLine("    None,");
+            foreach (var kind in dict.Values)
+                builder.AppendLine($"    {kind.Kind},");
+            builder
+                .AppendLine("}");
 
-        context.RegisterSourceOutput(kindsProvider,
-            static (spc, kinds) =>
-            {
-                var builder = new StringBuilder();
-                if (kinds.AsDictionary() is Dictionary<string, OpKind> dict)
-                {
-                    builder
-                        .AppendLine("using static Stride.Shaders.Spirv.Specification;")
-                        .AppendLine("")
-                        .AppendLine("namespace Stride.Shaders.Spirv.Core;")
-                        .AppendLine("")
-                        .AppendLine("public enum OperandKind")
-                        .AppendLine("{")
-                        .AppendLine("    None,");
-                    foreach (var kind in dict.Values)
-                        builder.AppendLine($"    {kind.Kind},");
-                    builder
-                        .AppendLine("}");
-
-                    builder.AppendLine()
-                    .AppendLine("public static class OperandKindExtensions")
-                    .AppendLine("{")
-                    .AppendLine("public static bool IsEnum(this OperandKind kind)")
-                    .AppendLine("{")
-                    .AppendLine("return kind switch")
-                    .AppendLine("{");
-                    foreach (var kind in dict.Values.Where(k => k.Category.EndsWith("Enum")))
-                        builder.AppendLine($"    OperandKind.{kind.Kind} => true,");
-                    builder.AppendLine("    _ => false")
-                    .AppendLine("};")
-                    .AppendLine("}")
-                    .AppendLine("public static string? ConvertEnumValueToString(this OperandKind kind, int value)")
-                    .AppendLine("{")
-                    .AppendLine("return kind switch")
-                    .AppendLine("{");
-                    foreach (var kind in dict.Values.Where(k => k.Category.EndsWith("Enum")))
-                        builder.AppendLine($"    OperandKind.{kind.Kind} => (({kind.Kind}{(kind.Category is "BitEnum" ? "Mask" : "")})value).ToString(),");
-                    builder.AppendLine("    _ => null")
-                    .AppendLine("};")
-                    .AppendLine("}")
-                    .AppendLine("}");
-                }
-                spc.AddSource("OperandKind.gen.cs", SourceText.From(
-                    SyntaxFactory
-                    .ParseCompilationUnit(builder.ToString())
-                    .NormalizeWhitespace()
-                    .ToFullString(),
-                    Encoding.UTF8
-                ));
-            }
+            builder.AppendLine()
+            .AppendLine("public static class OperandKindExtensions")
+            .AppendLine("{")
+            .AppendLine("public static bool IsEnum(this OperandKind kind)")
+            .AppendLine("{")
+            .AppendLine("return kind switch")
+            .AppendLine("{");
+            foreach (var kind in dict.Values.Where(k => k.Category.EndsWith("Enum")))
+                builder.AppendLine($"    OperandKind.{kind.Kind} => true,");
+            builder.AppendLine("    _ => false")
+            .AppendLine("};")
+            .AppendLine("}")
+            .AppendLine("public static string? ConvertEnumValueToString(this OperandKind kind, int value)")
+            .AppendLine("{")
+            .AppendLine("return kind switch")
+            .AppendLine("{");
+            foreach (var kind in dict.Values.Where(k => k.Category.EndsWith("Enum")))
+                builder.AppendLine($"    OperandKind.{kind.Kind} => (({kind.Kind}{(kind.Category is "BitEnum" ? "Mask" : "")})value).ToString(),");
+            builder.AppendLine("    _ => null")
+            .AppendLine("};")
+            .AppendLine("}")
+            .AppendLine("}");
+        }
+        spc.AddSource("OperandKind.gen.cs",
+            SyntaxFactory
+            .ParseCompilationUnit(builder.ToString())
+            .NormalizeWhitespace()
+            .ToFullString()
         );
-        // var code = new StringBuilder()
-        // .AppendLine("using static Stride.Shaders.Spirv.Specification;")
-        // .AppendLine("")
-        // .AppendLine("namespace Stride.Shaders.Spirv.Core;")
-        // .AppendLine("\n\n")
-        // .AppendLine("public enum OperandKind")
-        // .AppendLine("{")
-
-        // .AppendLine("None = 0,");
-        // var kinds = spirvCore!.OperandKinds.Select(x => x.Kind);
-        // foreach (var kind in kinds)
-        // {
-        //     code.Append(kind).AppendLine(",");
-        // }
-        // code.AppendLine("}");
-
-        // context.RegisterPostInitializationOutput(ctx => ctx.AddSource("OperandKind.gen.cs", code.ToSourceText()));
-
     }
 
     public static void GenerateInfo(InstructionData op, StringBuilder code, SpirvGrammar grammar)

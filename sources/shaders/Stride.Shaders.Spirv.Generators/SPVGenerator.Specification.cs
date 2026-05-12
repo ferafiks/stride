@@ -2,23 +2,12 @@ using System;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Text;
 
 namespace Stride.Shaders.Spirv.Generators;
 
 public partial class SPVGenerator
 {
-    public void CreateSpecification(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<SpirvGrammar> grammarProvider)
-    {
-        var sdsloProvider = grammarProvider
-            .Select(static (grammar, _) => grammar);
-
-        context.RegisterSourceOutput(
-            sdsloProvider,
-            GenerateSDSLSpecification
-        );
-    }
-    public void GenerateSDSLSpecification(SourceProductionContext spc, SpirvGrammar grammar)
+    public static void GenerateSDSLSpecification(ISpvOutput spc, SpirvGrammar grammar)
     {
         var code = new StringBuilder();
         code
@@ -58,13 +47,10 @@ public partial class SPVGenerator
 
         spc.AddSource(
             "SDSLSpecification.gen.cs",
-            SourceText.From(
-                SyntaxFactory
-                .ParseCompilationUnit(code.ToString())
-                .NormalizeWhitespace()
-                .ToFullString(),
-                Encoding.UTF8
-            )
+            SyntaxFactory
+            .ParseCompilationUnit(code.ToString())
+            .NormalizeWhitespace()
+            .ToFullString()
         );
     }
 }

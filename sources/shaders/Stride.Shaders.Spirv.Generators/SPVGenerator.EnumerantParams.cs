@@ -2,54 +2,41 @@
 using AngleSharp.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Text;
 using System.Text;
 
 namespace Stride.Shaders.Spirv.Generators;
 
-public partial class SPVGenerator : IIncrementalGenerator
+public partial class SPVGenerator
 {
-
-    public void CreateEnumerantParameters(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<SpirvGrammar> grammarProvider)
-    {
-        context.RegisterSourceOutput(
-            grammarProvider,
-            GenerateEnumerantParameters
-        );
-    }
-
-    public static void GenerateEnumerantParameters(SourceProductionContext spc, SpirvGrammar grammar)
+    public static void GenerateEnumerantParameters(ISpvOutput spc, SpirvGrammar grammar)
     {
         if (grammar.OperandKinds?.AsDictionary()?.Values?.ToList() is List<OpKind> opkinds)
         {
             spc.AddSource(
                 $"EnumerantParameters.gen.cs",
-                SourceText.From(
-                    SyntaxFactory
-                    .ParseCompilationUnit(@$"
-                        using static Stride.Shaders.Spirv.Specification;
-                        using CommunityToolkit.HighPerformance;
-                        using CommunityToolkit.HighPerformance.Buffers;
-                        using Stride.Shaders.Spirv.Core.Buffers;
+                SyntaxFactory
+                .ParseCompilationUnit(@$"
+                    using static Stride.Shaders.Spirv.Specification;
+                    using CommunityToolkit.HighPerformance;
+                    using CommunityToolkit.HighPerformance.Buffers;
+                    using Stride.Shaders.Spirv.Core.Buffers;
 
-                        namespace Stride.Shaders.Spirv.Core;
-                        
-                        {string.Join("\n", opkinds.Where(k => (k.Enumerants?.AsList() ?? []).Any(e => (e.Parameters?.AsList() ?? []).Count > 0)).Select(i => GenerateEnumerantParameterSingle(i, grammar)))}
-                        
-                        public ref partial struct EnumerantParameters
-                        {{
-                            {string.Join("\n", opkinds.Where(k => (k.Enumerants?.AsList() ?? []).Any(e => (e.Parameters?.AsList() ?? []).Count > 0)).Select(i => GenerateImplicitCasting(i, grammar)))}
-                            {string.Join("\n", opkinds.Where(k => (k.Enumerants?.AsList() ?? []).Any(e => (e.Parameters?.AsList() ?? []).Count > 0)).SelectMany(k => k.Enumerants?.AsList() ?? []).Select(e => e.Parameters)
-                            .Select(p => new EquatableList<string>(p?.AsList().Select(x => x.Kind.ToCSType()).ToList() ?? []))
-                            .Where(p => p.Count > 1)
-                            .Distinct()
-                            .Select(i => GenerateImplicitTuples(i, grammar)))}
-                        }}
-                    ")
-                    .NormalizeWhitespace()
-                    .ToFullString(),
-                    Encoding.UTF8
-                )
+                    namespace Stride.Shaders.Spirv.Core;
+
+                    {string.Join("\n", opkinds.Where(k => (k.Enumerants?.AsList() ?? []).Any(e => (e.Parameters?.AsList() ?? []).Count > 0)).Select(i => GenerateEnumerantParameterSingle(i, grammar)))}
+
+                    public ref partial struct EnumerantParameters
+                    {{
+                        {string.Join("\n", opkinds.Where(k => (k.Enumerants?.AsList() ?? []).Any(e => (e.Parameters?.AsList() ?? []).Count > 0)).Select(i => GenerateImplicitCasting(i, grammar)))}
+                        {string.Join("\n", opkinds.Where(k => (k.Enumerants?.AsList() ?? []).Any(e => (e.Parameters?.AsList() ?? []).Count > 0)).SelectMany(k => k.Enumerants?.AsList() ?? []).Select(e => e.Parameters)
+                        .Select(p => new EquatableList<string>(p?.AsList().Select(x => x.Kind.ToCSType()).ToList() ?? []))
+                        .Where(p => p.Count > 1)
+                        .Distinct()
+                        .Select(i => GenerateImplicitTuples(i, grammar)))}
+                    }}
+                ")
+                .NormalizeWhitespace()
+                .ToFullString()
             );
         }
     }

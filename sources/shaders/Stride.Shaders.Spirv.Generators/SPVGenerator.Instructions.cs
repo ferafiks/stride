@@ -1,7 +1,6 @@
 using AngleSharp.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Text;
 using System.Collections.Concurrent;
 using System.Dynamic;
 using System.Text;
@@ -9,7 +8,7 @@ using System.Text.Json;
 
 namespace Stride.Shaders.Spirv.Generators;
 
-public partial class SPVGenerator : IIncrementalGenerator
+public partial class SPVGenerator
 {
     internal class StringBuilderPool
     {
@@ -24,42 +23,31 @@ public partial class SPVGenerator : IIncrementalGenerator
         }
         public static void Return(StringBuilder builder) => Instance.pool.Add(builder);
     }
-    public void GenerateStructs(IncrementalGeneratorInitializationContext context, IncrementalValueProvider<SpirvGrammar> grammarProvider)
-    {
-        context.RegisterImplementationSourceOutput(
-            grammarProvider,
-            GenerateInstructionStructs
-        );
 
-    }
-
-    public static void GenerateInstructionStructs(SourceProductionContext spc, SpirvGrammar grammar)
+    public static void GenerateInstructionStructs(ISpvOutput spc, SpirvGrammar grammar)
     {
         if (grammar.Instructions?.AsList() is List<InstructionData> instructions)
         {
             spc.AddSource(
                 $"Instructions.gen.cs",
-                SourceText.From(
-                    SyntaxFactory
-                    .ParseCompilationUnit(@$"
-                        #pragma warning disable CS9264 // Non-nullable property must contain a non-null value when exiting constructor. Consider adding the 'required' modifier, or declaring the property as nullable, or safely handling the case where 'field' is null in the 'get' accessor.
+                SyntaxFactory
+                .ParseCompilationUnit(@$"
+                    #pragma warning disable CS9264 // Non-nullable property must contain a non-null value when exiting constructor. Consider adding the 'required' modifier, or declaring the property as nullable, or safely handling the case where 'field' is null in the 'get' accessor.
 
-                        using static Stride.Shaders.Spirv.Specification;
-                        using CommunityToolkit.HighPerformance;
-                        using CommunityToolkit.HighPerformance.Buffers;
-                        using Stride.Shaders.Spirv.Core.Buffers;
-                        using System.Numerics;
-                        using System.Runtime.CompilerServices;
+                    using static Stride.Shaders.Spirv.Specification;
+                    using CommunityToolkit.HighPerformance;
+                    using CommunityToolkit.HighPerformance.Buffers;
+                    using Stride.Shaders.Spirv.Core.Buffers;
+                    using System.Numerics;
+                    using System.Runtime.CompilerServices;
 
-                        namespace Stride.Shaders.Spirv.Core;
-                        
-                        {string.Join("\n", instructions.Select(i => GenerateInstructionStructsSingle(i, grammar)))}
-                        
-                    ")
-                    .NormalizeWhitespace()
-                    .ToFullString(),
-                    Encoding.UTF8
-                )
+                    namespace Stride.Shaders.Spirv.Core;
+
+                    {string.Join("\n", instructions.Select(i => GenerateInstructionStructsSingle(i, grammar)))}
+
+                ")
+                .NormalizeWhitespace()
+                .ToFullString()
             );
         }
     }
