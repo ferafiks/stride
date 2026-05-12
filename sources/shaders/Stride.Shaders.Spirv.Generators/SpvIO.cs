@@ -1,5 +1,4 @@
-// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org)
-// Copyright (c) Stride contributors (https://stride3d.net)
+// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 namespace Stride.Shaders.Spirv.Generators;

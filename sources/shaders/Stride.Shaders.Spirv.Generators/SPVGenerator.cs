@@ -1,5 +1,4 @@
-// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org)
-// Copyright (c) Stride contributors (https://stride3d.net)
+// Copyright (c) .NET Foundation and Contributors (https://dotnetfoundation.org/ & https://stride3d.net)
 // Distributed under the MIT license. See the LICENSE.md file in the project root for more information.
 
 using System.Collections.Immutable;
@@ -32,7 +31,7 @@ public partial class SPVGenerator
         if (missing.Length > 0)
             throw new InvalidOperationException(
                 $"Missing SPIR-V specification files: {string.Join(", ", missing)}. "
-                + "Run 'git submodule update --init --recursive'.");
+                + "Check the fetch list in Program.cs.");
 
         var gen = new SPVGenerator();
         var grammar = gen.PreProcessGrammar(filtered, default);

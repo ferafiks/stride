@@ -126,7 +126,7 @@ public partial class SPVGenerator
             var extinst = instructions.FirstOrDefault(x => x.OpName == "OpExtInst");
             if (extinst.OpName is null)
                 throw new InvalidOperationException(
-                    "OpExtInst not found in SPIR-V grammar. Ensure git submodules are fetched (git submodule update --init). "
+                    "OpExtInst not found in SPIR-V grammar. Check the fetch list in Program.cs. "
                     + $"Found {instructions.Count} instructions: [{string.Join(", ", instructions.Take(5).Select(x => x.OpName))}...]");
             // Prebuilt for fast lookup
             var tableblocksCore = coreDoc!.QuerySelectorAll($"p.tableblock").ToArray();
