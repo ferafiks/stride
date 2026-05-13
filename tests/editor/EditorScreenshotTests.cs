@@ -6,6 +6,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Stride.Assets.Presentation;
+using Stride.Assets.Presentation.Templates;
+using Stride.Assets.Templates;
+using Stride.Core.Assets;
+using Stride.Core.Assets.Templates;
+using Stride.Core.Diagnostics;
+using Stride.Core.IO;
 using Stride.GameStudio.AutoTesting;
 using Stride.Tests.ScreenshotComparator;
 using Xunit;
@@ -35,16 +42,16 @@ public class EditorScreenshotTests
 
     public static IEnumerable<object[]> Fixtures()
     {
-        // (fixtureName, optional .sln path relative to worktree, timeout-minutes)
-        yield return new object?[] { "EmptyEditor",   null,                                              3 };
-        yield return new object?[] { "TopDownCreate", null,                                              8 };
-        yield return new object?[] { "TopDownLoad",   "samples/Templates/TopDownRPG/TopDownRPG.sln",     5 };
-        yield return new object?[] { "NewGameEditor", null,                                              5 };
+        // (fixtureName, optional template GUID to instantiate and upgrade before opening, timeout-minutes)
+        yield return new object?[] { "EmptyEditor",   (Guid?)null,                                                       3 };
+        yield return new object?[] { "TopDownCreate", (Guid?)null,                                                       8 };
+        yield return new object?[] { "TopDownLoad",   (Guid?)new Guid("A363FBC5-89EF-4E7A-B870-6D070813D034"),           5 };
+        yield return new object?[] { "NewGameEditor", (Guid?)null,                                                       5 };
     }
 
     [Theory]
     [MemberData(nameof(Fixtures))]
-    public void Capture(string fixtureName, string? slnPathRel, int timeoutMin)
+    public void Capture(string fixtureName, Guid? templateGuid, int timeoutMin)
     {
         var worktree = WorktreeRoot();
         var captureRoot = Path.Combine(worktree, "ui-test-out-" + Dpi);
@@ -55,7 +62,11 @@ public class EditorScreenshotTests
         var dll = typeof(EditorScreenshotTests).Assembly.Location;
         var exe = ResolveAutoTestingExe(dll, worktree);
         var args = new List<string> { "--test-dll", dll, "--test-name", fixtureName };
-        if (slnPathRel is not null) args.Add(Path.Combine(worktree, slnPathRel));
+        if (templateGuid is { } guid)
+        {
+            var generated = GenerateSampleFromTemplate(guid, fixtureName);
+            args.Add(generated);
+        }
 
         // Clean the runner-side output dir so stale files from a previous fixture invocation
         // don't leak into this fixture's capture set.
@@ -117,6 +128,57 @@ public class EditorScreenshotTests
         }
         var failures = results.Where(r => r.Status is "drift" or "error" or "new").ToList();
         Assert.Empty(failures);
+    }
+
+    /// <summary>
+    /// Instantiates a template sample (by GUID) into a per-fixture temp dir via
+    /// <see cref="TemplateSampleGenerator"/> — the exact path GS's New Project wizard uses
+    /// internally, so any future generator changes (e.g. silent-upgrade behaviour) flow through.
+    /// Returns the absolute .sln path the AutoTesting runner should open.
+    /// </summary>
+    private static string GenerateSampleFromTemplate(Guid templateGuid, string sampleName)
+    {
+        var outputDir = Path.Combine(Path.GetTempPath(), "stride-editor-tests", sampleName);
+        if (Directory.Exists(outputDir))
+            Directory.Delete(outputDir, recursive: true);
+        Directory.CreateDirectory(outputDir);
+
+        PackageSessionPublicHelper.FindAndSetMSBuildVersion();
+
+        var logger = new LoggerResult();
+        var session = new PackageSession();
+        var parameters = new SessionTemplateGeneratorParameters { Session = session, Unattended = true };
+        TemplateSampleGenerator.SetParameters(
+            parameters,
+            AssetRegistry.SupportedPlatforms
+                .Where(x => x.Type == Core.PlatformType.Windows)
+                .Select(x => new SelectedSolutionPlatform(x, x.Templates.FirstOrDefault()))
+                .ToList());
+
+        StrideDefaultAssetsPlugin.LoadDefaultTemplates();
+        var template = TemplateManager.FindTemplates(session).FirstOrDefault(t => t.Id == templateGuid)
+            ?? throw new InvalidOperationException($"Template {templateGuid} not found in catalog");
+        parameters.Description = template;
+        parameters.Name = sampleName;
+        parameters.Namespace = sampleName;
+        parameters.OutputDirectory = outputDir;
+        parameters.Logger = logger;
+
+        session.SolutionPath = UPath.Combine<UFile>(outputDir, sampleName + ".sln");
+
+        var generator = TemplateSampleGenerator.Default;
+        if (!generator.PrepareForRun(parameters).Result)
+            throw new InvalidOperationException($"PrepareForRun failed for {sampleName}:\n{logger.ToText()}");
+        if (!generator.Run(parameters))
+            throw new InvalidOperationException($"Run failed for {sampleName}:\n{logger.ToText()}");
+
+        // Persist any in-memory asset upgrades the generator triggered (via AddExistingProject's
+        // null-callback default-Upgrade path) — otherwise GS would re-detect them on open.
+        session.Save(logger);
+        if (logger.HasErrors)
+            throw new InvalidOperationException($"Generating sample {sampleName} produced errors:\n{logger.ToText()}");
+
+        return session.SolutionPath.ToOSPath();
     }
 
     private static string ResolveAutoTestingExe(string testDllPath, string worktree)

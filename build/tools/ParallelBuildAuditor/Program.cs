@@ -78,6 +78,11 @@ src.AnyEventRaised += (_, e) =>
         "_GetProjectReferenceTargetFrameworkProperties",
         "GetAllRuntimeIdentifiers",
         "_StrideQueryGraphicsApis",
+        // NuGet pack inner-loop targets: dispatched per-TFM with TargetFramework set
+        // explicitly to collect per-TFM pack inputs. Not real second builds.
+        "_GetProjectVersion", "_GetBuildOutputFilesWithTfm", "_GetTfmSpecificContentForPackage",
+        "_GetDebugSymbolsWithTfm", "_GetFrameworkAssemblyReferences",
+        "_GetFrameworksWithSuppressedDependencies",
     ];
     if (!string.IsNullOrEmpty(ps.TargetNames))
     {
