@@ -273,6 +273,15 @@
   </Target>
 
   <!-- ================================================================ -->
+  <!-- Strip unused ComInterfaceGenerator (slow, we don't use the feature) -->
+  <!-- ================================================================ -->
+  <Target Name="_StrideStripComInterfaceGenerator" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'Microsoft.Interop.ComInterfaceGenerator'" />
+    </ItemGroup>
+  </Target>
+
+  <!-- ================================================================ -->
   <!-- Configuration Validation -->
   <!-- ================================================================ -->
   <Target Name="_StrideValidateConfiguration" BeforeTargets="Build">
