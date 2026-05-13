@@ -12,7 +12,6 @@ using Stride.Shaders.Spirv.Building;
 using Stride.Shaders.Spirv.Core;
 using Stride.Shaders.Spirv.Core.Buffers;
 using Stride.Shaders.Spirv.Tools;
-using static Stride.Core.Storage.BundleOdbBackend;
 using static Stride.Shaders.Spirv.Specification;
 
 namespace Stride.Shaders.Parsing.SDSL.AST;

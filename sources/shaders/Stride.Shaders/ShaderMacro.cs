@@ -3,7 +3,6 @@
 using System;
 using System.Runtime.InteropServices;
 using Stride.Core;
-using Stride.Core.Serialization;
 
 namespace Stride.Shaders
 {

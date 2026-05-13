@@ -8,7 +8,6 @@ using System.Linq;
 using System.Text;
 
 using Stride.Core;
-using Stride.Core.Serialization;
 
 namespace Stride.Shaders
 {

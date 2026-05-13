@@ -139,6 +139,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Core.IO", "..\source
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Shaders", "..\sources\shaders\Stride.Shaders\Stride.Shaders.csproj", "{273BDD15-7392-4078-91F0-AF23594A3D7B}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Shaders.Effects", "..\sources\shaders\Stride.Shaders.Effects\Stride.Shaders.Effects.csproj", "{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Audio", "..\sources\engine\Stride.Audio\Stride.Audio.csproj", "{DE042125-C270-4D1D-9270-0759C167567A}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride", "..\sources\engine\Stride\Stride.csproj", "{72390339-B2A1-4F61-A800-31ED0975B515}"
@@ -315,7 +317,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Shaders.Generators.I
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Shaders.Spirv.Generators", "..\sources\shaders\Stride.Shaders.Spirv.Generators\Stride.Shaders.Spirv.Generators.csproj", "{2618F6D9-685D-FDE1-B467-84BC8C858F51}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Shaders.Spirv.Core", "..\sources\shaders\Stride.Shaders.Spirv.Core\Stride.Shaders.Spirv.Core.csproj", "{7B8E1D5D-64B3-B768-B2EB-EF2B27DDE2BB}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Shaders.Spirv", "..\sources\shaders\Stride.Shaders.Spirv\Stride.Shaders.Spirv.csproj", "{7B8E1D5D-64B3-B768-B2EB-EF2B27DDE2BB}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.Shaders.Tests", "..\sources\shaders\Stride.Shaders.Tests\Stride.Shaders.Tests.csproj", "{137B0DE2-10F3-3496-6A5B-D3FE538BAA7B}"
 EndProject
@@ -585,6 +587,16 @@ Global
 		{273BDD15-7392-4078-91F0-AF23594A3D7B}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{273BDD15-7392-4078-91F0-AF23594A3D7B}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{273BDD15-7392-4078-91F0-AF23594A3D7B}.Release|Win32.ActiveCfg = Release|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Debug|Win32.ActiveCfg = Debug|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9}.Release|Win32.ActiveCfg = Release|Any CPU
 		{DE042125-C270-4D1D-9270-0759C167567A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DE042125-C270-4D1D-9270-0759C167567A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DE042125-C270-4D1D-9270-0759C167567A}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
@@ -1613,6 +1625,7 @@ Global
 		{1320F627-EE43-4115-8E89-19D1753E51F2} = {2E93E2B5-4500-4E47-9B65-E705218AB578}
 		{1DE01410-22C9-489B-9796-1ADDAB1F64E5} = {2E93E2B5-4500-4E47-9B65-E705218AB578}
 		{273BDD15-7392-4078-91F0-AF23594A3D7B} = {7E3ACF35-0CCA-4E88-866B-0F008C5A5580}
+		{3D415F8D-6729-4FC9-82E2-BEA7D76C75C9} = {7E3ACF35-0CCA-4E88-866B-0F008C5A5580}
 		{DE042125-C270-4D1D-9270-0759C167567A} = {4C142567-C42B-40F5-B092-798882190209}
 		{72390339-B2A1-4F61-A800-31ED0975B515} = {4C142567-C42B-40F5-B092-798882190209}
 		{E8B3553F-A79F-4E50-B75B-ACEE771C320C} = {7E3ACF35-0CCA-4E88-866B-0F008C5A5580}

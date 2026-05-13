@@ -8,8 +8,6 @@ using System.Linq;
 using System.Text;
 
 using Stride.Core;
-using Stride.Core.Mathematics;
-using Stride.Core.Serialization;
 
 namespace Stride.Shaders
 {
@@ -71,8 +69,6 @@ namespace Stride.Shaders
             return value switch
             {
                 bool b => b ? "true" : "false",
-                Vector4 v => $"float4({v.X}, {v.Y}, {v.Z}, {v.W})",
-                Vector3 v => $"float3({v.X}, {v.Y}, {v.Z})",
                 null => "null",
                 _ => Convert.ToString(value, CultureInfo.InvariantCulture),
             };

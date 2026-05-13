@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Stride.Shaders.Parsers\Stride.Shaders.Parsers.csproj" />
     <ProjectReference Include="..\Stride.Shaders\Stride.Shaders.csproj" />
+    <ProjectReference Include="..\Stride.Shaders.Effects\Stride.Shaders.Effects.csproj" />
     <ProjectReference Include="..\Stride.Shaders.Generators\Stride.Shaders.Generators.csproj" ReferenceOutputAssembly="false" />
     <PackageReference Include="CommunityToolkit.HighPerformance" PrivateAssets="compile" />
     <!-- SPIRV-Cross: we use the managed bindings from Silk.NET but replace the native
