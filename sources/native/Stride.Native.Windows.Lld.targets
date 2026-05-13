@@ -15,25 +15,22 @@
     
     Compiles C/C++ files for 32-bit Windows using clang and links with LLD
   -->
-  <Target Name="_StrideCompileNativeWindows_X86_Lld" 
-          Inputs="@(StrideNativeCFile);@(StrideNativeHFile)" 
-          Outputs="$(OutputObjectPath)\win-x86\compiled" 
+  <Target Name="_StrideCompileNativeWindows_X86_Lld"
+          Inputs="@(StrideNativeCFile);@(StrideNativeHFile)"
+          Outputs="@(StrideNativeCFile->'$(OutputObjectPath)\win-x86\%(Filename).obj')"
           Condition="'$(StrideNativeBuildModeClang)' == 'true'">
 
     <MakeDir Directories="$(OutputObjectPath)\win-x86"/>
 
     <!-- Compile C files -->
-    <Exec Condition="'%(StrideNativeCFile.Extension)' != '.cpp'" 
-          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x86\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target i686-pc-windows-msvc" 
+    <Exec Condition="'%(StrideNativeCFile.Extension)' != '.cpp'"
+          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x86\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target i686-pc-windows-msvc"
           ContinueOnError="false" />
 
     <!-- Compile C++ files -->
-    <Exec Condition="'%(StrideNativeCFile.Extension)' == '.cpp'" 
-          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClangCPP) $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x86\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target i686-pc-windows-msvc" 
+    <Exec Condition="'%(StrideNativeCFile.Extension)' == '.cpp'"
+          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClangCPP) $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x86\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target i686-pc-windows-msvc"
           ContinueOnError="false" />
-
-    <!-- Create marker file -->
-    <Touch AlwaysCreate="true" Files="$(OutputObjectPath)\win-x86\compiled" />
   </Target>
 
   <!-- 
@@ -41,9 +38,9 @@
 
     Links compiled .obj files for 32-bit Windows using LLVM LLD with MSVC ABI
   -->
-  <Target Name="_StrideLinkNativeWindows_X86_Lld" 
-          Inputs="$(OutputObjectPath)\win-x86\compiled" 
-          Outputs="$(StrideNativeOutputPath)\runtimes\win-x86\native\$(StrideNativeOutputName).dll" 
+  <Target Name="_StrideLinkNativeWindows_X86_Lld"
+          Inputs="@(StrideNativeCFile->'$(OutputObjectPath)\win-x86\%(Filename).obj')"
+          Outputs="$(StrideNativeOutputPath)\runtimes\win-x86\native\$(StrideNativeOutputName).dll"
           Condition="'$(StrideNativeBuildModeClang)' == 'true'">
     
     <MakeDir Directories="$(StrideNativeOutputPath)\runtimes\win-x86\native"/>
@@ -60,25 +57,22 @@
     
     Compiles C/C++ files for 64-bit Windows using clang and links with LLD
   -->
-  <Target Name="_StrideCompileNativeWindows_X64_Lld" 
-          Inputs="@(StrideNativeCFile);@(StrideNativeHFile)" 
-          Outputs="$(OutputObjectPath)\win-x64\compiled" 
+  <Target Name="_StrideCompileNativeWindows_X64_Lld"
+          Inputs="@(StrideNativeCFile);@(StrideNativeHFile)"
+          Outputs="@(StrideNativeCFile->'$(OutputObjectPath)\win-x64\%(Filename).obj')"
           Condition="'$(StrideNativeBuildModeClang)' == 'true'">
 
     <MakeDir Directories="$(OutputObjectPath)\win-x64"/>
 
     <!-- Compile C files -->
-    <Exec Condition="'%(StrideNativeCFile.Extension)' != '.cpp'" 
-          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target x86_64-pc-windows-msvc" 
+    <Exec Condition="'%(StrideNativeCFile.Extension)' != '.cpp'"
+          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target x86_64-pc-windows-msvc"
           ContinueOnError="false" />
 
     <!-- Compile C++ files -->
-    <Exec Condition="'%(StrideNativeCFile.Extension)' == '.cpp'" 
-          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClangCPP) $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target x86_64-pc-windows-msvc" 
+    <Exec Condition="'%(StrideNativeCFile.Extension)' == '.cpp'"
+          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClangCPP) $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-x64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target x86_64-pc-windows-msvc"
           ContinueOnError="false" />
-
-    <!-- Create marker file -->
-    <Touch AlwaysCreate="true" Files="$(OutputObjectPath)\win-x64\compiled" />
   </Target>
 
   <!-- 
@@ -86,9 +80,9 @@
     
     Links compiled .obj files for 64-bit Windows using LLVM LLD with MSVC ABI
   -->
-  <Target Name="_StrideLinkNativeWindows_X64_Lld" 
-          Inputs="$(OutputObjectPath)\win-x64\compiled" 
-          Outputs="$(StrideNativeOutputPath)\runtimes\win-x64\native\$(StrideNativeOutputName).dll" 
+  <Target Name="_StrideLinkNativeWindows_X64_Lld"
+          Inputs="@(StrideNativeCFile->'$(OutputObjectPath)\win-x64\%(Filename).obj')"
+          Outputs="$(StrideNativeOutputPath)\runtimes\win-x64\native\$(StrideNativeOutputName).dll"
           Condition="'$(StrideNativeBuildModeClang)' == 'true'">
 
     <MakeDir Directories="$(StrideNativeOutputPath)\runtimes\win-x64\native"/>
@@ -110,25 +104,22 @@
     Compiles C/C++ files for ARM64 Windows using clang and links with LLD
     Conditional: Only if StrideNativeWindowsArm64Enabled is true
   -->
-  <Target Name="_StrideCompileNativeWindows_ARM64_Lld" 
-          Inputs="@(StrideNativeCFile);@(StrideNativeHFile)" 
-          Outputs="$(OutputObjectPath)\win-arm64\compiled" 
+  <Target Name="_StrideCompileNativeWindows_ARM64_Lld"
+          Inputs="@(StrideNativeCFile);@(StrideNativeHFile)"
+          Outputs="@(StrideNativeCFile->'$(OutputObjectPath)\win-arm64\%(Filename).obj')"
           Condition="'$(StrideNativeBuildModeClang)' == 'true' AND '$(StrideNativeWindowsArm64Enabled)' == 'true'">
 
     <MakeDir Directories="$(OutputObjectPath)\win-arm64"/>
 
     <!-- Compile C files -->
-    <Exec Condition="'%(StrideNativeCFile.Extension)' != '.cpp'" 
-          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-arm64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target aarch64-pc-windows-msvc" 
+    <Exec Condition="'%(StrideNativeCFile.Extension)' != '.cpp'"
+          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-arm64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target aarch64-pc-windows-msvc"
           ContinueOnError="false" />
 
     <!-- Compile C++ files -->
-    <Exec Condition="'%(StrideNativeCFile.Extension)' == '.cpp'" 
-          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClangCPP) $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-arm64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target aarch64-pc-windows-msvc" 
+    <Exec Condition="'%(StrideNativeCFile.Extension)' == '.cpp'"
+          Command="&quot;$(StrideNativeClangCommand)&quot; -gcodeview -fno-ms-extensions -nobuiltininc -nostdinc++ $(StrideNativeClangCPP) $(StrideNativeClang) -DNEED_DLL_EXPORT -o &quot;$(OutputObjectPath)\win-arm64\%(StrideNativeCFile.Filename).obj&quot; -c &quot;%(StrideNativeCFile.FullPath)&quot; -fms-extensions -DWINDOWS_DESKTOP -target aarch64-pc-windows-msvc"
           ContinueOnError="false" />
-
-    <!-- Create marker file -->
-    <Touch AlwaysCreate="true" Files="$(OutputObjectPath)\win-arm64\compiled" />
   </Target>
 
   <!-- 
@@ -136,9 +127,9 @@
     
     Links compiled .obj files for ARM64 Windows using LLVM LLD with MSVC ABI
   -->
-  <Target Name="_StrideLinkNativeWindows_ARM64_Lld" 
-          Inputs="$(OutputObjectPath)\win-arm64\compiled" 
-          Outputs="$(StrideNativeOutputPath)\runtimes\win-arm64\native\$(StrideNativeOutputName).dll" 
+  <Target Name="_StrideLinkNativeWindows_ARM64_Lld"
+          Inputs="@(StrideNativeCFile->'$(OutputObjectPath)\win-arm64\%(Filename).obj')"
+          Outputs="$(StrideNativeOutputPath)\runtimes\win-arm64\native\$(StrideNativeOutputName).dll"
           Condition="'$(StrideNativeBuildModeClang)' == 'true' AND '$(StrideNativeWindowsArm64Enabled)' == 'true'">
     
     <MakeDir Directories="$(StrideNativeOutputPath)\runtimes\win-arm64\native"/>
