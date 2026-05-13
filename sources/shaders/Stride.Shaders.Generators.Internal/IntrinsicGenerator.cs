@@ -62,9 +62,17 @@ internal class IntrinsicsGenerator : IIncrementalGenerator
         if (namespaces.Items.Count == 0)
             builder.AppendLine("// No intrinsics parsed");
 
+        // Per-namespace Build<Name>() methods scope locals away from the static ctor; emitting
+        // every namespace's dictionary as a field initializer in the cctor blew past Mono Android's
+        // per-method locals/IL size cap (InvalidProgramException: locals size too big).
+        foreach (var ns in namespaces)
+            builder.AppendLine($"public static FrozenDictionary<string, IntrinsicDefinition[]> {ns.Name.Name} {{ get; }} = Build{ns.Name.Name}();");
+
         foreach (var ns in namespaces)
         {
-            builder.AppendLine($"public static FrozenDictionary<string, IntrinsicDefinition[]> {ns.Name.Name} {{ get; }} = new Dictionary<string, IntrinsicDefinition[]>()")
+            builder.AppendLine($"private static FrozenDictionary<string, IntrinsicDefinition[]> Build{ns.Name.Name}()")
+            .AppendLine("{")
+            .AppendLine("return new Dictionary<string, IntrinsicDefinition[]>()")
             .AppendLine("{");
             foreach (var intrinsicGroup in ns.Intrinsics.Items.GroupBy(i => i.Name.Name).Where(x => x.Key is not "printf"))
             {
@@ -121,7 +129,8 @@ internal class IntrinsicsGenerator : IIncrementalGenerator
                 }
                 builder.AppendLine("],");
             }
-            builder.AppendLine("}.ToFrozenDictionary();");
+            builder.AppendLine("}.ToFrozenDictionary();")
+            .AppendLine("}");
         }
         builder.AppendLine("}");
 
