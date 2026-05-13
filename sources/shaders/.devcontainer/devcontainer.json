@@ -17,6 +17,5 @@
     },
     "features": {
         "ghcr.io/devcontainers/features/powershell:1": {}
-    },
-    "postStartCommand": "git submodule update --init"
+    }
 }

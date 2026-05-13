@@ -4,12 +4,6 @@
     <StrideRuntime>true</StrideRuntime>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\..\..\build\submodules\CppNet8\*.cs" LinkBase="CppNet" />
-    <Compile Include="..\..\..\build\submodules\CppNet8\JavaCompat\*.cs" LinkBase="CppNet\JavaCompat" />
-    <Compile Remove="..\..\..\build\submodules\CppNet8\CppReader.cs" />
-    <Compile Remove="..\..\..\build\submodules\CppNet8\CppTask.cs" />
-    <Compile Remove="..\..\..\build\submodules\CppNet8\InputLexerSource.cs" />
-    <Compile Remove="..\..\..\build\submodules\CppNet8\TokenSnifferSource.cs" />
     <None Remove="gen_intrin_main.txt" />
     <AdditionalFiles Include="gen_intrin_main.txt" />
   </ItemGroup>
