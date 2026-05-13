@@ -5,8 +5,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Stride.Core.MicroThreading;
+using Stride.Core.Serialization;
+using Stride.Core.Serialization.Contents;
 
-namespace Stride.Core.Serialization.Contents;
+namespace Stride.Engine;
 
 /// <summary>
 /// Async Load/Reload helpers for <see cref="ContentManager"/> that propagate the calling MicroThread's
