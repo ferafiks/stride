@@ -1,6 +1,7 @@
 using Silk.NET.Core.Native;
 using Silk.NET.SPIRV;
 using Silk.NET.SPIRV.Cross;
+using Stride.Core;
 using Stride.Core.Diagnostics;
 using System.Linq.Expressions;
 using System.Runtime.InteropServices;
@@ -13,8 +14,14 @@ using Result = Silk.NET.SPIRV.Cross.Result;
 
 public unsafe record struct SpirvTranslator(ReadOnlyMemory<uint> Words)
 {
-    static readonly Cross cross = Cross.GetApi();
+    static readonly Cross cross;
     static readonly Logger Log = GlobalLogger.GetLogger("SpirvTranslator");
+
+    static SpirvTranslator()
+    {
+        NativeLibraryHelper.PreloadLibrary("spirv-cross", typeof(SpirvTranslator));
+        cross = Cross.GetApi();
+    }
 
     public List<(string RealName, string TranslatedName, ExecutionModel ExecutionModel)> GetEntryPoints(Backend backend = Backend.Hlsl)
     {
