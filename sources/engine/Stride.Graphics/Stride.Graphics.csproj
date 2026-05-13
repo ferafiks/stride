@@ -36,7 +36,6 @@
       <GlobalPropertiesToRemove>TargetFramework;StrideGraphicsApi</GlobalPropertiesToRemove>
       <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
     </ProjectReference>
-    <ProjectReference Include="..\..\shaders\Stride.Shaders\Stride.Shaders.csproj" />
     <ProjectReference Include="..\..\shaders\Stride.Shaders.Effects\Stride.Shaders.Effects.csproj" />
     <ProjectReference Include="..\Stride\Stride.csproj" />
     <PackageReference Include="System.Memory" />
