@@ -183,6 +183,20 @@
   </Target>
 
   <!-- ================================================================ -->
+  <!-- FastUpToDateCheck: invalidate when packed content files change -->
+  <!-- ================================================================ -->
+  <!-- VS's FastUpToDateCheck only watches Compile items by default. Pack-only
+       content (build/buildTransitive targets, AssetPackage assets, etc.) is
+       declared via None/Content with Pack="true"; if those change and
+       nothing in Compile does, VS reports "up to date" and skips Build/Pack
+       so the .nupkg never refreshes. Registering them as UpToDateCheckInput
+       forces a rebuild whenever they're edited. -->
+  <ItemGroup>
+    <UpToDateCheckInput Include="@(None->WithMetadataValue('Pack', 'true'))" />
+    <UpToDateCheckInput Include="@(Content->WithMetadataValue('Pack', 'true'))" />
+  </ItemGroup>
+
+  <!-- ================================================================ -->
   <!-- Auto-Pack and Deploy for NuGet Development -->
   <!-- ================================================================ -->
   <Target Name="StrideAutoPackDeploy" AfterTargets="Pack">
