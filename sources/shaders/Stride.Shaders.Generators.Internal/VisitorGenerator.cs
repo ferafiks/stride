@@ -44,7 +44,7 @@ namespace Stride.Shaders.Spirv.Generators
         private void GenerateVisitorsBase(SourceProductionContext context, Compilation compilation, bool generateRewriter, string visitorName, Func<ITypeSymbol, bool> isNodeType)
         {
             var classVisitor = new NodeTypeClassFinder(isNodeType);
-            classVisitor.Visit(compilation.GlobalNamespace);
+            classVisitor.Visit(compilation.Assembly.GlobalNamespace);
 
             var symbolTypes = classVisitor.SymbolTypes;
 
