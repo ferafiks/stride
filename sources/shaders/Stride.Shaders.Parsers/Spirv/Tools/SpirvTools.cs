@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Stride.Core;
 
 namespace Stride.Shaders.Spirv.Tools;
 
@@ -16,6 +17,11 @@ namespace Stride.Shaders.Spirv.Tools;
 public static unsafe class SpirvTools
 {
     const string Lib = "stride_spirv_tools";
+
+    static SpirvTools()
+    {
+        NativeLibraryHelper.PreloadLibrary(Lib, typeof(SpirvTools));
+    }
 
     public enum TargetEnv
     {
