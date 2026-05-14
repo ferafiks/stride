@@ -106,6 +106,27 @@ jobs:
             -nr:false -v:m -p:WarningLevel=0 `
             -p:Configuration=${{ github.event.inputs.build-type || 'Debug' }}
 
+      # Pre-test snapshot of NuGet state: bin/packages timestamps+sizes (catches partial writes
+      # or out-of-order packing), NuGet global cache extractions for Stride.*, and the user
+      # nuget config (which sources/mapping the sample restore will see).
+      - name: Diagnostic — NuGet state pre-test
+        shell: pwsh
+        run: |
+          Write-Host "=== bin/packages Stride.* (name, size, mtime) ==="
+          Get-ChildItem bin\packages\Stride.*.nupkg -ErrorAction SilentlyContinue |
+            Format-Table Name, Length, LastWriteTimeUtc -AutoSize
+          Write-Host "=== NuGet global cache: stride.* extractions ==="
+          $cache = "$env:UserProfile\.nuget\packages"
+          if (Test-Path $cache) {
+            Get-ChildItem "$cache\stride.*" -Directory -ErrorAction SilentlyContinue |
+              Get-ChildItem -Directory -ErrorAction SilentlyContinue |
+              Format-Table FullName, LastWriteTimeUtc -AutoSize
+          } else { "No global packages cache at $cache" }
+          Write-Host "=== NuGet sources (user config) ==="
+          dotnet nuget list source --configfile "$env:APPDATA\NuGet\NuGet.Config"
+          Write-Host "=== User NuGet.Config ==="
+          if (Test-Path "$env:APPDATA\NuGet\NuGet.Config") { Get-Content "$env:APPDATA\NuGet\NuGet.Config" }
+
       # EditorScreenshotTests.Capture is an xunit [Theory] over Fixtures(); each entry spawns
       # the AutoTesting CLI as a subprocess (per-fixture WPF singleton-state isolation),
       # snapshots the runner output into <worktree>/ui-test-out-dpi<N>/<fixture>/, then runs
@@ -147,3 +168,20 @@ jobs:
           name: editor-crash-dumps
           path: crash-dumps/
           if-no-files-found: ignore
+
+      # Sample's project.assets.json (NuGet resolution record) + csproj/sln, plus the actual
+      # Stride.Engine/Core.Serialization DLLs that ended up in the sample's bin (their content
+      # reveals which version was materialized, independent of what assets.json claims).
+      - name: Upload generated sample obj/ + materialized engine DLLs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-sample-obj
+          path: |
+            C:\Users\runneradmin\AppData\Local\Temp\stride-editor-tests\**\obj\project.assets.json
+            C:\Users\runneradmin\AppData\Local\Temp\stride-editor-tests\**\*.csproj
+            C:\Users\runneradmin\AppData\Local\Temp\stride-editor-tests\**\*.sln
+            C:\Users\runneradmin\AppData\Local\Temp\stride-editor-tests\**\bin\**\Stride.Engine.dll
+            C:\Users\runneradmin\AppData\Local\Temp\stride-editor-tests\**\bin\**\Stride.Core.Serialization.dll
+          if-no-files-found: warn
+          retention-days: 7
