@@ -261,7 +261,7 @@ namespace Stride.Engine
             // Init assets
             if (Context.InitializeDatabase)
             {
-                PlatformConfigurations.RendererName = GraphicsAdapterFactory.DefaultAdapter?.Name ?? string.Empty;
+                PlatformConfigurations.RendererName = GraphicsAdapterFactory.DefaultAdapter?.Description ?? string.Empty;
 
                 databaseFileProvider = InitializeAssetDatabase();
                 ((DatabaseFileProviderService)Services.GetService<IDatabaseFileProviderService>()).FileProvider = databaseFileProvider;
